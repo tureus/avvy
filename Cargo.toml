@@ -8,8 +8,14 @@ log = "0.4.3"
 serde = "1.0.70"
 serde_derive = "1.0.70"
 serde_json = "1.0.24"
-byteorder = "1.2.3"
 integer-encoding = "1.0.5"
+
+[dev-dependencies]
+criterion = "0.2"
+
+[[bench]]
+name = "criterion"
+harness = false
 
 [profile.release]
 lto = true

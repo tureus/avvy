@@ -2,6 +2,8 @@ use serde::de::{ Deserializer, Visitor };
 
 use super::super::*;
 
+use byteorder::{ LittleEndian, ReadBytesExt };
+
 pub struct AvroDeserializer<'de> {
     pub buf: &'de [u8],
     pub schema: &'de Schema,
@@ -44,19 +46,23 @@ impl<'de, 'a> Deserializer<'de> for &'a mut AvroDeserializer<'de> {
     }
 
     fn deserialize_u32<V>(mut self, visitor: V) -> Result<V::Value,Self::Error> where V: Visitor<'de> {
-        unimplemented!()
+        visitor.visit_u32(self.visit_u32())
     }
 
     fn deserialize_u64<V>(mut self, visitor: V) -> Result<V::Value,Self::Error> where V: Visitor<'de> {
-        unimplemented!()
+        visitor.visit_u64(self.visit_u64())
     }
 
     fn deserialize_f32<V>(mut self, visitor: V) -> Result<V::Value,Self::Error> where V: Visitor<'de> {
-        unimplemented!()
+        let val = self.buf.read_f32::<LittleEndian>().unwrap();
+        self.buf = &self.buf[4..];
+        visitor.visit_f32(val)
     }
 
     fn deserialize_f64<V>(mut self, visitor: V) -> Result<V::Value,Self::Error> where V: Visitor<'de> {
-        unimplemented!()
+        let val = self.buf.read_f64::<LittleEndian>().unwrap();
+        self.buf = &self.buf[8..];
+        visitor.visit_f64(val)
     }
 
 
@@ -145,6 +151,22 @@ impl<'de> AvroDeserializer<'de> {
 
     pub fn skip(&mut self, bytes: usize) {
         self.buf = &self.buf[bytes..];
+    }
+
+    pub fn visit_u32(&mut self) -> u32 {
+        let (val,size) = integer_encoding::VarInt::decode_var(self.buf);
+        info!("val: {}, size: {}", val, size);
+
+        self.buf = &self.buf[size..];
+        val
+    }
+
+    pub fn visit_u64(&mut self) -> u64 {
+        let (val,size) = integer_encoding::VarInt::decode_var(self.buf);
+        info!("val: {}, size: {}", val, size);
+
+        self.buf = &self.buf[size..];
+        val
     }
 
     pub fn visit_i32(&mut self) -> i32 {

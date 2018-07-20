@@ -9,6 +9,7 @@ serde = "1.0.70"
 serde_derive = "1.0.70"
 serde_json = "1.0.24"
 integer-encoding = "1.0.5"
+byteorder = "1.2.3"
 
 [dev-dependencies]
 criterion = "0.2"

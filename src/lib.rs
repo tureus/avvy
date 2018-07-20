@@ -3,6 +3,8 @@
 #[macro_use] extern crate serde;
 #[macro_use] extern crate serde_derive;
 
+extern crate byteorder;
+
 #[macro_use] extern crate log;
 extern crate test;
 

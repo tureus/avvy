@@ -33,14 +33,14 @@ struct SchemaField {
     types: Vec<SchemaFieldType>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 #[serde(untagged)]
 enum SchemaFieldType {
     Primitive(Primitive),
     Complex(Complex),
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 #[serde(rename_all = "lowercase")]
 enum Primitive {
     Null,
@@ -57,7 +57,7 @@ enum Primitive {
     Int64T,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 #[serde(tag = "type", rename_all = "lowercase")]
 enum Complex {
     Fixed {
@@ -178,107 +178,9 @@ const SCHEMA_STR: &'static str = r###"{
       ]
     }"###;
 
-struct AvroVisitor {
-    fields: Vec<AvroField>
-}
-
-#[derive(Debug,Clone)]
-struct AvroField {
-    name: String,
-    types: AvroTypeOneOrMany
-}
-
-#[derive(Debug,Clone)]
-enum AvroTypeOneOrMany {
-    One(AvroType),
-    Many(Vec<AvroType>)
-}
-
-#[derive(Debug,Clone,PartialEq)]
-enum AvroType {
-    Primitive(AvroPrimitiveFields),
-    StringMap,
-    Fixed{name: String, size: usize}
-}
-
-#[derive(Debug,Clone,PartialEq)]
-enum AvroPrimitiveFields {
-    Null,
-    Int,
-    Long,
-    Float,
-    Double,
-    Boolean,
-    Bytes,
-    String
-}
-
-fn schema() -> AvroVisitor {
-    AvroVisitor {
-        fields: vec![
-            AvroField {
-                name: "timestamp".into(),
-                types: AvroTypeOneOrMany::Many(
-                    vec![
-                        AvroType::Primitive(AvroPrimitiveFields::Long),
-                        AvroType::Primitive(AvroPrimitiveFields::Int),
-                        AvroType::Primitive(AvroPrimitiveFields::Float),
-                        AvroType::Primitive(AvroPrimitiveFields::Double),
-                        AvroType::Fixed{name: "uint64_t".into(), size: 8},
-                        AvroType::Fixed{name: "int64_t".into(), size: 8}
-                    ]
-                )
-            },
-            AvroField {
-                name: "metric".into(),
-                types: AvroTypeOneOrMany::One(
-                    AvroType::Primitive(AvroPrimitiveFields::String)
-                )
-            },
-            AvroField {
-                name: "value".into(),
-                types: AvroTypeOneOrMany::Many(
-                    vec![
-                        AvroType::Primitive(AvroPrimitiveFields::Long),
-                        AvroType::Primitive(AvroPrimitiveFields::Int),
-                        AvroType::Primitive(AvroPrimitiveFields::Float),
-                        AvroType::Primitive(AvroPrimitiveFields::Double),
-                        AvroType::Fixed{name: "uint8_t".into(), size: 1},
-                        AvroType::Fixed{name: "uint16_t".into(), size: 2},
-                        AvroType::Fixed{name: "uint32_t".into(), size: 4},
-                        AvroType::Fixed{name: "uint64_t".into(), size: 8},
-                        AvroType::Fixed{name: "int8_t".into(), size: 1},
-                        AvroType::Fixed{name: "int16_t".into(), size: 2},
-                        AvroType::Fixed{name: "int32_t".into(), size: 4},
-                        AvroType::Fixed{name: "int64_t".into(), size: 8},
-                    ]
-                )
-            },
-            AvroField {
-                name: "tags".into(),
-                types: AvroTypeOneOrMany::Many(
-                    vec![
-                        AvroType::Primitive(AvroPrimitiveFields::Null),
-                        AvroType::StringMap
-                    ]
-                )
-            },
-            AvroField {
-                name: "metadata".into(),
-                types: AvroTypeOneOrMany::Many(
-                    vec![
-                        AvroType::Primitive(AvroPrimitiveFields::Null),
-                        AvroType::StringMap
-                    ]
-                )
-            }
-        ]
-    }
-}
-
 struct AvroDeserializer<'de> {
     buf: &'de [u8],
-    visitor: AvroVisitor,
+    schema: Schema,
     current_field_index: Option<usize>
 }
 
@@ -540,18 +442,8 @@ impl<'de, 'a> Deserializer<'de> for &'a mut AvroDeserializer<'de> {
         let field = self.current_field();
         println!("deserialize_enum enum_name: {}, enum_variants: {:?}", enum_name, enum_variants);
 
-        match field.types {
-            AvroTypeOneOrMany::One(ref thing) => {
-                println!("enum is one of: {:?}", thing);
-                let value = visitor.visit_enum(AvroEnumVisitor::new(self, enum_name, enum_variants) )?;
-                Ok(value)
-            },
-            AvroTypeOneOrMany::Many(ref types) => {
-                println!("enum is any of {:?}", types);
-                let value = visitor.visit_enum(AvroEnumVisitor::new(self, enum_name, enum_variants) )?;
-                Ok(value)
-            }
-        }
+        let value = visitor.visit_enum(AvroEnumVisitor::new(self, enum_name, enum_variants) )?;
+        Ok(value)
     }
 
     fn deserialize_string<V>(mut self, visitor: V) -> Result<V::Value, Self::Error>
@@ -572,18 +464,15 @@ impl<'de, 'a> Deserializer<'de> for &'a mut AvroDeserializer<'de> {
         println!("option variant: {}", enum_variant);
 
         let current_field = self.current_field();
-        match current_field.types {
-            AvroTypeOneOrMany::Many(ref types) => {
-                if enum_variant >= types.len() {
-                    return Err(AvroError{reason: "option variant id out of scope".into()})
-                } else if types[enum_variant] == AvroType::Primitive(AvroPrimitiveFields::Null) {
-                    visitor.visit_none()
-                } else {
-                    visitor.visit_some(self)
-                }
-            },
-            AvroTypeOneOrMany::One(_) => {
-                return Err(AvroError{ reason: "this should be an option but it's a union in the schema!".into() })
+        if current_field.types.len() != 2 {
+            return Err(AvroError{ reason: "this should be an option but the schema's union is too small".into() })
+        } else {
+            if enum_variant >= current_field.types.len() {
+                return Err(AvroError{reason: "option variant id out of scope".into()})
+            } else if current_field.types[enum_variant] == SchemaFieldType::Primitive(Primitive::Null) {
+                visitor.visit_none()
+            } else {
+                visitor.visit_some(self)
             }
         }
     }
@@ -679,10 +568,10 @@ impl<'de> AvroDeserializer<'de> {
 }
 
 impl<'de> AvroDeserializer<'de> {
-    fn from_slice(visitor: AvroVisitor, buf: &'de [u8]) -> Self {
+    fn from_slice(schema: Schema, buf: &'de [u8]) -> Self {
         AvroDeserializer {
             buf,
-            visitor,
+            schema,
             current_field_index: None,
         }
     }
@@ -696,9 +585,9 @@ impl<'de> AvroDeserializer<'de> {
         println!("done with field, now on current_field_index {:?}", self.current_field_index);
     }
 
-    fn current_field(&mut self) -> &AvroField {
+    fn current_field(&mut self) -> &SchemaField {
         println!("current_field index: {:?}", self.current_field_index);
-        &self.visitor.fields[self.current_field_index.unwrap()]
+        &self.schema.fields[self.current_field_index.unwrap()]
     }
 }
 
@@ -739,7 +628,7 @@ enum Value {
 fn avro_deserializer() {
     let record : [u8; 257] = [0, 0, 0, 2, 106, 0, 186, 149, 235, 179, 11, 86, 118, 105, 97, 115, 97, 116, 45, 97, 98, 45, 118, 110, 111, 45, 112, 109, 46, 117, 116, 46, 112, 100, 102, 46, 102, 108, 45, 115, 100, 117, 45, 109, 97, 114, 107, 101, 100, 45, 99, 111, 117, 110, 116, 0, 0, 2, 22, 10, 97, 110, 45, 105, 100, 2, 49, 10, 112, 100, 102, 105, 100, 8, 49, 48, 53, 50, 16, 115, 109, 97, 99, 100, 45, 105, 100, 6, 49, 52, 55, 24, 115, 97, 116, 101, 108, 108, 105, 116, 101, 45, 105, 100, 2, 52, 34, 115, 109, 97, 99, 45, 115, 101, 114, 118, 105, 99, 101, 45, 110, 97, 109, 101, 26, 115, 109, 97, 99, 45, 99, 104, 105, 48, 55, 45, 115, 50, 16, 109, 97, 99, 45, 97, 100, 100, 114, 24, 48, 48, 97, 48, 98, 99, 56, 99, 55, 57, 55, 102, 10, 115, 116, 97, 116, 101, 14, 111, 110, 95, 108, 105, 110, 101, 14, 98, 101, 97, 109, 45, 105, 100, 10, 49, 49, 48, 52, 53, 22, 99, 97, 114, 114, 105, 101, 114, 100, 45, 105, 100, 2, 55, 12, 118, 110, 111, 45, 105, 100, 6, 120, 99, 105, 44, 115, 101, 114, 118, 105, 110, 103, 45, 115, 109, 97, 99, 45, 104, 111, 115, 116, 45, 110, 97, 109, 101, 36, 115, 109, 97, 99, 45, 99, 104, 105, 48, 55, 45, 110, 50, 45, 98, 101, 116, 97, 0, 0];
 
-    let visitor = schema();
+    let visitor = Schema::from_str(SCHEMA_STR).unwrap();
     let mut deserializer = AvroDeserializer::from_slice( visitor,&record[..]);
     deserializer.skip(5);
 

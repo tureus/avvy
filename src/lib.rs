@@ -9,7 +9,7 @@ extern crate integer_encoding;
 extern crate byteorder;
 
 use serde::{Deserialize, Deserializer};
-use serde::de::{ Visitor, EnumAccess, IntoDeserializer };
+use serde::de::{ Visitor, EnumAccess, IntoDeserializer, MapAccess };
 
 #[derive(Serialize, Deserialize, Debug)]
 struct Schema {
@@ -194,14 +194,14 @@ enum AvroTypeOneOrMany {
     Many(Vec<AvroType>)
 }
 
-#[derive(Debug,Clone)]
+#[derive(Debug,Clone,PartialEq)]
 enum AvroType {
     Primitive(AvroPrimitiveFields),
     StringMap,
     Fixed{name: String, size: usize}
 }
 
-#[derive(Debug,Clone)]
+#[derive(Debug,Clone,PartialEq)]
 enum AvroPrimitiveFields {
     Null,
     Int,
@@ -234,6 +234,43 @@ fn schema() -> AvroVisitor {
                 types: AvroTypeOneOrMany::One(
                     AvroType::Primitive(AvroPrimitiveFields::String)
                 )
+            },
+            AvroField {
+                name: "value".into(),
+                types: AvroTypeOneOrMany::Many(
+                    vec![
+                        AvroType::Primitive(AvroPrimitiveFields::Long),
+                        AvroType::Primitive(AvroPrimitiveFields::Int),
+                        AvroType::Primitive(AvroPrimitiveFields::Float),
+                        AvroType::Primitive(AvroPrimitiveFields::Double),
+                        AvroType::Fixed{name: "uint8_t".into(), size: 1},
+                        AvroType::Fixed{name: "uint16_t".into(), size: 2},
+                        AvroType::Fixed{name: "uint32_t".into(), size: 4},
+                        AvroType::Fixed{name: "uint64_t".into(), size: 8},
+                        AvroType::Fixed{name: "int8_t".into(), size: 1},
+                        AvroType::Fixed{name: "int16_t".into(), size: 2},
+                        AvroType::Fixed{name: "int32_t".into(), size: 4},
+                        AvroType::Fixed{name: "int64_t".into(), size: 8},
+                    ]
+                )
+            },
+            AvroField {
+                name: "tags".into(),
+                types: AvroTypeOneOrMany::Many(
+                    vec![
+                        AvroType::Primitive(AvroPrimitiveFields::Null),
+                        AvroType::StringMap
+                    ]
+                )
+            },
+            AvroField {
+                name: "metadata".into(),
+                types: AvroTypeOneOrMany::Many(
+                    vec![
+                        AvroType::Primitive(AvroPrimitiveFields::Null),
+                        AvroType::StringMap
+                    ]
+                )
             }
         ]
     }
@@ -242,7 +279,7 @@ fn schema() -> AvroVisitor {
 struct AvroDeserializer<'de> {
     buf: &'de [u8],
     visitor: AvroVisitor,
-    current_field_index: usize
+    current_field_index: Option<usize>
 }
 
 #[derive(Debug)]
@@ -268,13 +305,13 @@ impl std::error::Error for AvroError {
 
 }
 
-struct AvroMapVisitor<'a, 'de: 'a> {
+struct AvroIdentifierMapVisitor<'a, 'de: 'a> {
     de: &'a mut AvroDeserializer<'de>,
     count: usize,
     expected: usize,
 }
 
-impl<'de, 'a> serde::de::MapAccess<'de> for AvroMapVisitor<'a, 'de> {
+impl<'de, 'a> serde::de::MapAccess<'de> for AvroIdentifierMapVisitor<'a, 'de> {
     type Error = AvroError;
 
     fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<K::Value>, Self::Error>
@@ -294,6 +331,54 @@ impl<'de, 'a> serde::de::MapAccess<'de> for AvroMapVisitor<'a, 'de> {
             V: serde::de::DeserializeSeed<'de> {
         println!("next_value_seed");
         seed.deserialize(&mut *self.de)
+    }
+}
+
+struct AvroValueMapAccess<'a, 'de: 'a> {
+    de: &'a mut AvroDeserializer<'de>,
+    size: i64,
+}
+
+impl<'a, 'de> MapAccess<'de> for AvroValueMapAccess<'a, 'de> {
+    type Error = AvroError;
+
+    /// This returns `Ok(Some(key))` for the next key in the map, or `Ok(None)`
+    /// if there are no more remaining entries.
+    ///
+    /// `Deserialize` implementations should typically use
+    /// `MapAccess::next_key` or `MapAccess::next_entry` instead.
+    fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<K::Value>, Self::Error>
+        where K: serde::de::DeserializeSeed<'de> {
+        println!("next_value_seed (entry {})", self.size);
+        if self.size == 0 {
+            Ok(None)
+        } else {
+            let val = seed.deserialize(&mut *self.de).map(Some);
+            self.size -= 1;
+            val
+        }
+    }
+
+    /// This returns a `Ok(value)` for the next value in the map.
+    ///
+    /// `Deserialize` implementations should typically use
+    /// `MapAccess::next_value` instead.
+    ///
+    /// # Panics
+    ///
+    /// Calling `next_value_seed` before `next_key_seed` is incorrect and is
+    /// allowed to panic or return bogus results.
+    fn next_value_seed<V>(&mut self, seed: V) -> Result<V::Value, Self::Error>
+        where
+            V: serde::de::DeserializeSeed<'de> {
+        println!("next_value_seed");
+        seed.deserialize(&mut *self.de)
+    }
+
+    /// Returns the number of entries remaining in the map, if known.
+    #[inline]
+    fn size_hint(&self) -> Option<usize> {
+        Some(self.size as usize)
     }
 }
 
@@ -324,18 +409,10 @@ impl<'de, 'a> EnumAccess<'de> for AvroEnumVisitor<'a, 'de> {
             V: serde::de::DeserializeSeed<'de>,
     {
         // This is the index in to the timestamp enum
-        let variant = self.de.visit_varint();
+        let variant = self.de.visit_uint();
         println!("EnumAccess::variant_seed: {}", variant);
 
         let val = seed.deserialize((variant as u32).into_deserializer())?;
-
-//        let val = match seed.deserialize(&mut *self.de) {
-//            Ok(t) => t,
-//            Err(e) => {
-//                println!("error! {:#?}", e);
-//                panic!("not sure how to direct deserialize");
-//            }
-//        };
 
         Ok((val,self))
     }
@@ -385,13 +462,15 @@ impl<'de, 'a> Deserializer<'de> for &'a mut AvroDeserializer<'de> {
 
     fn deserialize_any<V>(mut self, visitor: V) -> Result<V::Value,Self::Error>
         where V: Visitor<'de> {
-        unimplemented!()
+        unimplemented!("we don't do free form deserialization")
     }
 
     fn deserialize_i64<V>(mut self, visitor: V) -> Result<V::Value,Self::Error>
         where V: Visitor<'de> {
+        println!("deserialize_i64");
         visitor.visit_i64(self.visit_i64())
     }
+
     fn deserialize_i8<V>(mut self, visitor: V) -> Result<V::Value,Self::Error> where V: Visitor<'de> {
          unimplemented!()
     }
@@ -401,7 +480,8 @@ impl<'de, 'a> Deserializer<'de> for &'a mut AvroDeserializer<'de> {
     }
 
     fn deserialize_i32<V>(mut self, visitor: V) -> Result<V::Value,Self::Error> where V: Visitor<'de> {
-         unimplemented!()
+         println!("deserialize_i32");
+        visitor.visit_i32(self.visit_i32())
     }
 
     fn deserialize_u8<V>(mut self, visitor: V) -> Result<V::Value,Self::Error> where V: Visitor<'de> {
@@ -425,7 +505,7 @@ impl<'de, 'a> Deserializer<'de> for &'a mut AvroDeserializer<'de> {
     }
 
     fn deserialize_f64<V>(mut self, visitor: V) -> Result<V::Value,Self::Error> where V: Visitor<'de> {
-     unimplemented!()
+        unimplemented!()
     }
 
 
@@ -433,59 +513,113 @@ impl<'de, 'a> Deserializer<'de> for &'a mut AvroDeserializer<'de> {
         where V: Visitor<'de> {
         println!("deserialize_struct");
 
-        visitor.visit_map(AvroMapVisitor {de: &mut self, count: 0, expected: fields.len()})
+        visitor.visit_map(AvroIdentifierMapVisitor {de: &mut self, count: 0, expected: fields.len()})
     }
 
     fn deserialize_map<V>(mut self, visitor: V) -> Result<V::Value,Self::Error>
         where V: Visitor<'de> {
-        unimplemented!()
+        let size = {
+            self.visit_long()
+        };
+        let map_visitor = AvroValueMapAccess{de: &mut self, size};
+        visitor.visit_map( map_visitor)
     }
 
     fn deserialize_identifier<V>(mut self, visitor: V) -> Result<V::Value, Self::Error>
         where V: Visitor<'de> {
-        println!("deserialize identifier...");
-        let current_field = self.next_field();
+        self.next_field();
+        let current_field = self.current_field();
         println!("deserialize_identifier {}", current_field.name);
 
-        visitor.visit_string(current_field.name.clone())
+        let res = visitor.visit_string(current_field.name.clone());
+        res
     }
 
     fn deserialize_enum<V>(mut self, enum_name: &'static str, enum_variants: &[&'static str], visitor: V) -> Result<V::Value, Self::Error>
         where V: Visitor<'de> {
         let field = self.current_field();
-        println!("deserialize_enum");
+        println!("deserialize_enum enum_name: {}, enum_variants: {:?}", enum_name, enum_variants);
 
         match field.types {
-            AvroTypeOneOrMany::One(_) => {
-                unimplemented!()
+            AvroTypeOneOrMany::One(ref thing) => {
+                println!("enum is one of: {:?}", thing);
+                let value = visitor.visit_enum(AvroEnumVisitor::new(self, enum_name, enum_variants) )?;
+                Ok(value)
             },
-            AvroTypeOneOrMany::Many(ref _types) => {
-                println!("visiting enum");
+            AvroTypeOneOrMany::Many(ref types) => {
+                println!("enum is any of {:?}", types);
                 let value = visitor.visit_enum(AvroEnumVisitor::new(self, enum_name, enum_variants) )?;
                 Ok(value)
             }
         }
     }
 
+    fn deserialize_string<V>(mut self, visitor: V) -> Result<V::Value, Self::Error>
+        where V: Visitor<'de> {
+        println!("deserialize string...");
+        let string = String::from_utf8(self.visit_str().to_owned()).unwrap();
+        visitor.visit_string(string)
+    }
+
+    fn deserialize_option<V>(mut self, visitor: V) -> Result<V::Value, Self::Error>
+        where V: Visitor<'de> {
+        println!("deserialize option...");
+//        let string = String::from_utf8(self.visit_str().to_owned()).unwrap();
+        let enum_variant = {
+            self.visit_int() as usize
+        };
+
+        println!("option variant: {}", enum_variant);
+
+        let current_field = self.current_field();
+        match current_field.types {
+            AvroTypeOneOrMany::Many(ref types) => {
+                if enum_variant >= types.len() {
+                    return Err(AvroError{reason: "option variant id out of scope".into()})
+                } else if types[enum_variant] == AvroType::Primitive(AvroPrimitiveFields::Null) {
+                    visitor.visit_none()
+                } else {
+                    visitor.visit_some(self)
+                }
+            },
+            AvroTypeOneOrMany::One(_) => {
+                return Err(AvroError{ reason: "this should be an option but it's a union in the schema!".into() })
+            }
+        }
+    }
+
     forward_to_deserialize_any!{
         <V: Visitor<'de>>
-        bool char str string bytes byte_buf option unit unit_struct newtype_struct seq tuple tuple_struct ignored_any
+        bool char str bytes byte_buf unit unit_struct newtype_struct seq tuple tuple_struct ignored_any
     }
 }
 
 impl<'de> AvroDeserializer<'de> {
     fn dump(&self) {
-        println!("{:#?}", self.buf);
+        println!("dumping: {:#?}", self.buf);
     }
 
     fn skip(&mut self, bytes: usize) {
         self.buf = &self.buf[bytes..];
     }
 
-    fn visit_i64(&mut self) -> i64 {
+    fn visit_i32(&mut self) -> i32 {
         use byteorder::{ ByteOrder, LittleEndian };
-        let val = LittleEndian::read_i64(&self.buf[..8]);
-        self.buf = &self.buf[8..];
+        let val = LittleEndian::read_i32(&self.buf[..4]);
+        println!("LittleEndian byte stuff: {}", val);
+
+        let (val2,size2) : (i32,usize) = integer_encoding::VarInt::decode_var(self.buf);
+        println!("val2: {}, size2: {}", val2, size2);
+
+        self.buf = &self.buf[7..];
+        val
+    }
+
+    fn visit_i64(&mut self) -> i64 {
+        let (val,varsize) : (i64,usize) = integer_encoding::VarInt::decode_var(self.buf);
+        println!("visit_i64 val2: {}, varsize: {}", val, varsize);
+
+        self.buf = &self.buf[varsize..];
         val
     }
 
@@ -496,27 +630,38 @@ impl<'de> AvroDeserializer<'de> {
         val
     }
 
-    fn visit_varint(&mut self) -> i64 {
-        let (int,varsize) : (i64, usize) = integer_encoding::VarInt::decode_var(self.buf);
+    fn visit_uint(&mut self) -> u32 {
+        let (int,varsize) = integer_encoding::VarInt::decode_var(self.buf);
+        self.buf = &self.buf[varsize..];
+        int
+    }
+
+    fn visit_int(&mut self) -> i32 {
+        let (int,varsize) = integer_encoding::VarInt::decode_var(self.buf);
         self.buf = &self.buf[varsize..];
         int
     }
 
     fn visit_long(&mut self) -> i64 {
-        self.visit_varint()
+        let (int,varsize) = integer_encoding::VarInt::decode_var(self.buf);
+        self.buf = &self.buf[varsize..];
+        int
     }
 
     fn visit_str(&mut self) -> &'de [u8] {
-        let (strlen,strstart) : (u64, usize) = integer_encoding::VarInt::decode_var(&self.buf[..]);
+        let strlen = self.visit_long();
+        println!("strlen: {}", strlen);
 
-        let rstr = &self.buf[strstart..strstart+strlen as usize];
-        self.buf = &self.buf[strstart+strlen as usize..];
+        let rstr = &self.buf[..strlen as usize];
+        println!("rstr: {}", String::from_utf8(rstr.to_owned()).unwrap());
+
+        self.buf = &self.buf[strlen as usize..];
 
         rstr
     }
 
     fn visit_strmap(&mut self) -> Vec<(&[u8],&[u8])> {
-        let num_blocks = self.visit_varint();
+        let num_blocks = self.visit_long();
         println!("num_blocks: {}", num_blocks);
 
         let mut vec : Vec<(&[u8], &[u8])> = Vec::with_capacity(num_blocks as usize);
@@ -538,23 +683,22 @@ impl<'de> AvroDeserializer<'de> {
         AvroDeserializer {
             buf,
             visitor,
-            current_field_index: 0,
+            current_field_index: None,
         }
     }
 
-    fn next_field(&mut self) -> &AvroField {
-        println!("incr next_field: {}", self.current_field_index);
-        let avro_field = &self.visitor.fields[self.current_field_index];
-        self.current_field_index += 1;
-        avro_field
+    fn next_field(&mut self) {
+        if let Some(ref mut cfi) = self.current_field_index {
+            *cfi += 1;
+        } else {
+            self.current_field_index = Some(0);
+        };
+        println!("done with field, now on current_field_index {:?}", self.current_field_index);
     }
 
     fn current_field(&mut self) -> &AvroField {
-        &self.visitor.fields[self.current_field_index]
-    }
-
-    fn done_with_filed(&mut self) {
-        self.current_field_index += 1;
+        println!("current_field index: {:?}", self.current_field_index);
+        &self.visitor.fields[self.current_field_index.unwrap()]
     }
 }
 
@@ -562,18 +706,25 @@ impl<'de> AvroDeserializer<'de> {
 struct UT {
     timestamp: Timestamp,
     metric: String,
-//    value: Value,
+    value: Value,
+    tags: Option<std::collections::HashMap<String,String>>,
+    metadata: Option<std::collections::HashMap<String,String>>
 }
 
 #[derive(Deserialize,Debug)]
 enum Timestamp {
-    Long(u64),
-    Int(i64),
+    Long(i64),
+    Int(i32),
     Float(f32),
     Double(f64)
 }
 
+#[derive(Deserialize,Debug)]
 enum Value {
+    Long(i64),
+    Int(i32),
+    Float(f32),
+    Double(f64),
     Long8(u8),
     Long16(u16),
     Long32(u32),
@@ -581,9 +732,7 @@ enum Value {
     I8(i8),
     I16(i16),
     I32(i32),
-    Int64(i64),
-    Float(f32),
-    Double(f64)
+    Int64(i64)
 }
 
 #[test]
@@ -592,8 +741,9 @@ fn avro_deserializer() {
 
     let visitor = schema();
     let mut deserializer = AvroDeserializer::from_slice( visitor,&record[..]);
-    deserializer.skip(3);
+    deserializer.skip(5);
 
     let t = UT::deserialize(&mut deserializer);
+    deserializer.dump();
     panic!("t: {:#?}", t);
 }

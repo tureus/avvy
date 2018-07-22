@@ -19,7 +19,9 @@ impl<'a, 'de> MapAccess<'de> for AvroValueMapAccess<'a, 'de> {
     fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<K::Value>, Self::Error>
         where K: DeserializeSeed<'de> {
         info!("next_value_seed (entry {})", self.entries);
-        if self.entries <= 0 {
+        if self.de.peek() == 0 {
+            Ok(None)
+        } else if self.entries <= 0 {
             Ok(None)
         } else {
             let val = seed.deserialize(&mut *self.de).map(Some);

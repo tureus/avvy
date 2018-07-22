@@ -108,7 +108,10 @@ impl<'de, 'a> Deserializer<'de> for &'a mut AvroDeserializer<'de> {
 
     fn deserialize_map<V>(mut self, visitor: V) -> Result<V::Value,Self::Error>
         where V: Visitor<'de> {
-        let size = self.visit_long();
+        let mut size = self.visit_long();
+        if size < 0 {
+            size *= -1;
+        }
 
         let map_visitor = AvroValueMapAccess{de: &mut self, blocks: size, entries: size*2};
         info!("deserialize_map entries: {} => {}", size, size*2);
@@ -154,6 +157,10 @@ impl<'de> AvroDeserializer<'de> {
 
     pub fn skip(&mut self, bytes: usize) {
         self.buf = &self.buf[bytes..];
+    }
+
+    pub fn peek(&self) -> u8 {
+        self.buf[0]
     }
 
     pub fn visit_u32(&mut self) -> u32 {
@@ -220,6 +227,7 @@ impl<'de> AvroDeserializer<'de> {
     pub fn visit_long(&mut self) -> i64 {
         let (int,varsize) = integer_encoding::VarInt::decode_var(self.buf);
         self.buf = &self.buf[varsize..];
+        info!("visit_long: {}, size: {}", int, varsize);
         int
     }
 

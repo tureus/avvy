@@ -89,7 +89,7 @@ impl<'de, 'a> Deserializer<'de> for &'a mut AvroDeserializer<'de> {
             self.visit_int() as usize
         };
 
-        info!("option variant: {}", enum_variant);
+//        info!("option variant: {}", enum_variant);
 
         let current_field = self.current_field();
         if current_field.types.len() != 2 {
@@ -99,8 +99,10 @@ impl<'de, 'a> Deserializer<'de> for &'a mut AvroDeserializer<'de> {
 //                self.dump();
                 return Err(AvroError{reason: format!("option variant id for {} is out of scope, got {} but max is {}", current_field.name, enum_variant, current_field.types.len())})
             } else if current_field.types[enum_variant] == SchemaFieldType::Primitive(Primitive::Null) {
+                info!("option is a None");
                 visitor.visit_none()
             } else {
+                info!("option is Some");
                 visitor.visit_some(self)
             }
         }
@@ -108,11 +110,10 @@ impl<'de, 'a> Deserializer<'de> for &'a mut AvroDeserializer<'de> {
 
     fn deserialize_map<V>(mut self, visitor: V) -> Result<V::Value,Self::Error>
         where V: Visitor<'de> {
-        info!("deserialize_map");
-        let size = {
-            self.visit_long()
-        };
+        let size = self.visit_long();
+
         let map_visitor = AvroValueMapAccess{de: &mut self, blocks: size, entries: size*2};
+        info!("deserialize_map entries: {} => {}", size, size*2);
         visitor.visit_map( map_visitor)
     }
 
@@ -240,7 +241,7 @@ impl<'de> AvroDeserializer<'de> {
     }
 
     fn current_field(&self) -> &SchemaField {
-        info!("current_field index: {:?}", self.current_field_index);
+        debug!("current_field index: {:?}", self.current_field_index);
         &self.schema.fields[self.current_field_index.unwrap()]
     }
 }

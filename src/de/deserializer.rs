@@ -56,12 +56,14 @@ impl<'de, 'a> Deserializer<'de> for &'a mut AvroDeserializer<'de> {
     fn deserialize_f32<V>(mut self, visitor: V) -> Result<V::Value,Self::Error> where V: Visitor<'de> {
         let val = self.buf.read_f32::<LittleEndian>().unwrap();
         self.buf = &self.buf[4..];
+        info!("deserialize_f32: {}", val);
         visitor.visit_f32(val)
     }
 
     fn deserialize_f64<V>(mut self, visitor: V) -> Result<V::Value,Self::Error> where V: Visitor<'de> {
         let val = self.buf.read_f64::<LittleEndian>().unwrap();
         self.buf = &self.buf[8..];
+        info!("deserialize_f64: {}", val);
         visitor.visit_f64(val)
     }
 
@@ -94,7 +96,8 @@ impl<'de, 'a> Deserializer<'de> for &'a mut AvroDeserializer<'de> {
             return Err(AvroError{ reason: "this should be an option but the schema's union is too small".into() })
         } else {
             if enum_variant >= current_field.types.len() {
-                return Err(AvroError{reason: "option variant id out of scope".into()})
+//                self.dump();
+                return Err(AvroError{reason: format!("option variant id for {} is out of scope, got {} but max is {}", current_field.name, enum_variant, current_field.types.len())})
             } else if current_field.types[enum_variant] == SchemaFieldType::Primitive(Primitive::Null) {
                 visitor.visit_none()
             } else {
@@ -105,16 +108,17 @@ impl<'de, 'a> Deserializer<'de> for &'a mut AvroDeserializer<'de> {
 
     fn deserialize_map<V>(mut self, visitor: V) -> Result<V::Value,Self::Error>
         where V: Visitor<'de> {
+        info!("deserialize_map");
         let size = {
             self.visit_long()
         };
-        let map_visitor = AvroValueMapAccess{de: &mut self, size};
+        let map_visitor = AvroValueMapAccess{de: &mut self, blocks: size, entries: size*2};
         visitor.visit_map( map_visitor)
     }
 
     fn deserialize_struct<V>(mut self, _id: &'static str, fields: &'static[&'static str], visitor: V) -> Result<V::Value,Self::Error>
         where V: Visitor<'de> {
-        info!("deserialize_struct");
+        info!("deserialize_struct -> map visitor");
 
         visitor.visit_map(AvroIdentifierMapVisitor {de: &mut self, count: 0, expected: fields.len()})
     }
@@ -146,7 +150,7 @@ impl<'de, 'a> Deserializer<'de> for &'a mut AvroDeserializer<'de> {
 
 impl<'de> AvroDeserializer<'de> {
     pub fn dump(&self) {
-        info!("dumping: {:#?}", self.buf);
+        error!("dumping: {:?}", self.buf);
     }
 
     pub fn skip(&mut self, bytes: usize) {
@@ -155,7 +159,7 @@ impl<'de> AvroDeserializer<'de> {
 
     pub fn visit_u32(&mut self) -> u32 {
         let (val,size) = integer_encoding::VarInt::decode_var(self.buf);
-        info!("val: {}, size: {}", val, size);
+        info!("visit_u32 val: {}, size: {}", val, size);
 
         self.buf = &self.buf[size..];
         val
@@ -191,9 +195,10 @@ impl<'de> AvroDeserializer<'de> {
         int
     }
 
-    fn visit_int(&mut self) -> i32 {
+    pub fn visit_int(&mut self) -> i32 {
         let (int,varsize) = integer_encoding::VarInt::decode_var(self.buf);
         self.buf = &self.buf[varsize..];
+        info!("visit_int: {}, size: {}", int, varsize);
         int
     }
 
@@ -234,7 +239,7 @@ impl<'de> AvroDeserializer<'de> {
         info!("done with field, now on current_field_index {:?}", self.current_field_index);
     }
 
-    fn current_field(&mut self) -> &SchemaField {
+    fn current_field(&self) -> &SchemaField {
         info!("current_field index: {:?}", self.current_field_index);
         &self.schema.fields[self.current_field_index.unwrap()]
     }

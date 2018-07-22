@@ -4,7 +4,8 @@ use super::*;
 
 pub struct AvroValueMapAccess<'a, 'de: 'a> {
     pub de: &'a mut AvroDeserializer<'de>,
-    pub size: i64,
+    pub blocks: i64,
+    pub entries: i64,
 }
 
 impl<'a, 'de> MapAccess<'de> for AvroValueMapAccess<'a, 'de> {
@@ -17,12 +18,12 @@ impl<'a, 'de> MapAccess<'de> for AvroValueMapAccess<'a, 'de> {
     /// `MapAccess::next_key` or `MapAccess::next_entry` instead.
     fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<K::Value>, Self::Error>
         where K: DeserializeSeed<'de> {
-        info!("next_value_seed (entry {})", self.size);
-        if self.size == 0 {
+        info!("next_value_seed (entry {})", self.entries);
+        if self.entries <= 0 {
             Ok(None)
         } else {
             let val = seed.deserialize(&mut *self.de).map(Some);
-            self.size -= 1;
+            self.entries -= 1;
             val
         }
     }
@@ -46,6 +47,6 @@ impl<'a, 'de> MapAccess<'de> for AvroValueMapAccess<'a, 'de> {
     /// Returns the number of entries remaining in the map, if known.
     #[inline]
     fn size_hint(&self) -> Option<usize> {
-        Some(self.size as usize)
+        Some(self.blocks as usize)
     }
 }

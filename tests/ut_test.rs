@@ -1,10 +1,10 @@
-extern crate env_logger;
-
 extern crate serde;
 #[macro_use] extern crate serde_derive;
 extern crate avvy;
 
 use serde::de::Deserialize;
+
+use avvy::{ Schema, AvroDeserializer };
 
 pub const SCHEMA_STR: &'static str = r###"{
       "type": "record",
@@ -100,24 +100,16 @@ pub const SCHEMA_STR: &'static str = r###"{
 
 #[derive(Deserialize,Debug)]
 pub struct UT<'a> {
-    pub timestamp: Timestamp,
+    timestamp: Timestamp,
     pub metric: String,
-    pub value: Value,
+    value: Value,
     #[serde(borrow)]
-    pub tags: Option<std::collections::HashMap<&'a [u8], &'a [u8]>>,
-    #[serde(borrow)]
-    pub metadata: Option<std::collections::HashMap<&'a [u8], &'a [u8]>>
+    tags: Option<std::collections::HashMap<&'a [u8], &'a [u8]>>,
+    metadata: Option<std::collections::HashMap<&'a [u8], &'a [u8]>>
 }
 
 #[derive(Deserialize,Debug)]
-pub struct UTSafe {
-    pub timestamp: Timestamp,
-    pub metric: String,
-    pub value: Value,
-}
-
-#[derive(Deserialize,Debug)]
-pub enum Timestamp {
+enum Timestamp {
     Long(i64),
     Int(i32),
     Float(f32),
@@ -125,7 +117,7 @@ pub enum Timestamp {
 }
 
 #[derive(Deserialize,Debug)]
-pub enum Value {
+enum Value {
     Long(i64),
     Int(i32),
     Float(f32),
@@ -140,68 +132,17 @@ pub enum Value {
     Int64(i64)
 }
 
-fn main() {
-    env_logger::init();
-
+#[test]
+fn run_through_test_data() {
     let tests = test_data();
     let schema = avvy::Schema::from_str(SCHEMA_STR).unwrap();
 
-    for (i,test) in (&tests[..]).iter().enumerate() {
+
+    for test in tests {
         let buf = &test[..];
-        let buf_len = buf.len();
 
         let mut de = avvy::AvroDeserializer{buf, schema: &schema, current_field_index: None  };
-        de.skip(5);
-        let ut = UT::deserialize(&mut de);
-        match ut {
-            Ok(ut) => {
-                println!("ut: {:?}", ut)
-            },
-            Err(e) => {
-                let mut de = avvy::AvroDeserializer{buf, schema: &schema, current_field_index: None  };
-                de.skip(5);
-                let _ut = UTSafe::deserialize(&mut de).unwrap();
-                /* let end = buf_len-de.buf.len();
-                println!("error on {}", i);
-                println!("parse failed: {} (left off at {})", e, end);
-                println!("parse failed: {:?}", buf);
-                let good = &buf[0..end];
-                println!("good buf: {:?}", good);
-                let bad = &buf[end..];
-                println!("bad  buf: {:?}", bad);
-
-                println!("ts bytes: {:?}", &buf[5..11]);
-                println!("metric bytes: {:?} ({})", &buf[11..11+1+38], unsafe { String::from_utf8_unchecked((&buf[11+1..11+1+38]).to_owned()) });
-
-                println!("value bytes: {:?}", &buf[50..59]);
-                println!("value parsed: {:?}", _ut.value);
-
-                println!("tags bytes: {:?}", &buf[59..]);
-
-                let tag_buf = &buf[59..];
-                let mut fde = avvy::AvroDeserializer{buf: tag_buf, schema: &schema, current_field_index: None};
-
-                let variant = fde.visit_int();
-                let blocks = fde.visit_int();
-                println!("enum variant: {}, blocks: {}", variant, blocks );
-                for _b in 0..blocks*2 {
-                    let bytes = fde.visit_str();
-                    let stringy = String::from_utf8(bytes.to_owned()).unwrap();
-                    println!("stringy: {} / bytes: {:?}", stringy, bytes);
-                }
-
-                let variant = fde.visit_int();
-                let blocks = fde.visit_int();
-                println!("enum variant: {}, blocks: {}", variant, blocks );
-                for _b in 0..blocks*2 {
-                    let bytes = fde.visit_str();
-                    let stringy = String::from_utf8(bytes.to_owned()).unwrap();
-                    println!("stringy: {}", stringy);
-                }
-
-                fde.dump(); */
-            }
-        }
+        let ut = UT::deserialize(&mut de).unwrap();
     }
 }
 

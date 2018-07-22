@@ -26,7 +26,7 @@ impl<'de, 'a> EnumAccess<'de> for AvroEnumVisitor<'a, 'de> {
             V: DeserializeSeed<'de>,
     {
         // This is the index in to the timestamp enum
-        let variant = self.de.visit_uint();
+        let variant = self.de.visit_int();
         info!("EnumAccess::variant_seed: {}", variant);
 
         let val = seed.deserialize((variant as u32).into_deserializer())?;

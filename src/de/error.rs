@@ -21,6 +21,6 @@ impl Error for AvroError {
 
 impl Display for AvroError {
     fn fmt(&self, fmt: &mut Formatter) -> Result<(), FmtError> {
-        write!(fmt, "I got an error. Whoops!")
+        write!(fmt, "{}", self.reason)
     }
 }

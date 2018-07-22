@@ -61,9 +61,7 @@ impl<'de, 'a> Deserializer<'de> for &'a mut AvroDeserializer<'de> {
     }
 
     fn deserialize_f64<V>(mut self, visitor: V) -> Result<V::Value,Self::Error> where V: Visitor<'de> {
-        let val = self.buf.read_f64::<LittleEndian>().unwrap();
-        self.buf = &self.buf[8..];
-        info!("deserialize_f64: {}", val);
+        let val = self.visit_f64();
         visitor.visit_f64(val)
     }
 
@@ -187,6 +185,22 @@ impl<'de> AvroDeserializer<'de> {
         info!("visit_i64 val2: {}, varsize: {}", val, varsize);
 
         self.buf = &self.buf[varsize..];
+        val
+    }
+
+    pub fn visit_f32(&mut self) -> f32 {
+        let val = self.buf.read_f32::<LittleEndian>().unwrap();
+        info!("deserialize_f32: {}", val);
+
+        self.buf = &self.buf[8..];
+        val
+    }
+
+    pub fn visit_f64(&mut self) -> f64 {
+        let val = self.buf.read_f64::<LittleEndian>().unwrap();
+        info!("deserialize_f64: {}", val);
+
+        self.buf = &self.buf[8..];
         val
     }
 

@@ -107,8 +107,8 @@ pub struct UT<'a> {
     pub metric: String,
     value: Value,
     #[serde(borrow)]
-    tags: Option<std::collections::HashMap<&'a [u8], &'a [u8]>>,
-    metadata: Option<std::collections::HashMap<&'a [u8], &'a [u8]>>
+    tags: Option<std::collections::BTreeMap<&'a [u8], &'a [u8]>>,
+    metadata: Option<std::collections::BTreeMap<&'a [u8], &'a [u8]>>
 }
 
 #[derive(Deserialize,Debug)]
@@ -145,9 +145,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             let mut deserializer = AvroDeserializer::from_slice( &visitor,&record[..]);
             deserializer.skip(5);
 
-            let t : UT = UT::deserialize(&mut deserializer).unwrap();
-            assert_eq!(t.metric, "viasat-ab-vno-pm.ut.pdf.fl-sdu-marked-count".to_owned());
-            assert_eq!(deserializer.buf.len(), 1);
+            let _ : UT = UT::deserialize(&mut deserializer).unwrap();
         })
     });
 }

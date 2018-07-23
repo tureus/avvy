@@ -104,9 +104,9 @@ pub struct UT<'a> {
     pub metric: String,
     pub value: Value,
     #[serde(borrow)]
-    pub tags: Option<std::collections::HashMap<&'a [u8], &'a [u8]>>,
+    pub tags: Option<std::collections::BTreeMap<&'a [u8], &'a [u8]>>,
     #[serde(borrow)]
-    pub metadata: Option<std::collections::HashMap<&'a [u8], &'a [u8]>>
+    pub metadata: Option<std::collections::BTreeMap<&'a [u8], &'a [u8]>>
 }
 
 #[derive(Deserialize,Debug)]

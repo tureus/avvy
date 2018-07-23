@@ -2,6 +2,7 @@
 extern crate serde;
 #[macro_use] extern crate serde_derive;
 extern crate avvy;
+extern crate fnv;
 
 use criterion::Criterion;
 
@@ -107,8 +108,11 @@ pub struct UT<'a> {
     pub metric: String,
     value: Value,
     #[serde(borrow)]
-    tags: Option<std::collections::BTreeMap<&'a [u8], &'a [u8]>>,
-    metadata: Option<std::collections::BTreeMap<&'a [u8], &'a [u8]>>
+    tags: Option<fnv::FnvHashMap<&'a [u8], &'a [u8]>>,
+//    tags: Option<std::collections::BTreeMap<&'a [u8], &'a [u8]>>,
+    #[serde(borrow)]
+        metadata: Option<fnv::FnvHashMap<&'a [u8], &'a [u8]>>,
+//    metadata: Option<std::collections::BTreeMap<&'a [u8], &'a [u8]>>
 }
 
 #[derive(Deserialize,Debug)]

@@ -3,6 +3,7 @@ extern crate env_logger;
 extern crate serde;
 #[macro_use] extern crate serde_derive;
 extern crate avvy;
+extern crate fnv;
 
 use serde::de::Deserialize;
 
@@ -104,9 +105,10 @@ pub struct UT<'a> {
     pub metric: String,
     pub value: Value,
     #[serde(borrow)]
-    pub tags: Option<std::collections::BTreeMap<&'a [u8], &'a [u8]>>,
+//    pub tags: Option<std::collections::BTreeMap<&'a [u8], &'a [u8]>>,
+    pub tags: Option<fnv::FnvHashMap<&'a [u8], &'a [u8]>>,
     #[serde(borrow)]
-    pub metadata: Option<std::collections::BTreeMap<&'a [u8], &'a [u8]>>
+    pub metadata: Option<fnv::FnvHashMap<&'a [u8], &'a [u8]>>
 }
 
 #[derive(Deserialize,Debug)]

@@ -105,6 +105,7 @@ pub struct UT<'a> {
     value: Value,
     #[serde(borrow)]
     tags: Option<std::collections::BTreeMap<&'a [u8], &'a [u8]>>,
+    #[serde(borrow)]
     metadata: Option<std::collections::BTreeMap<&'a [u8], &'a [u8]>>
 }
 

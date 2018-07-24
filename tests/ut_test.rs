@@ -104,9 +104,9 @@ pub struct UT<'a> {
     pub metric: String,
     value: Value,
     #[serde(borrow)]
-    tags: Option<std::collections::BTreeMap<&'a [u8], &'a [u8]>>,
+    tags: Option<Vec<(&'a [u8], &'a [u8])>>,
     #[serde(borrow)]
-    metadata: Option<std::collections::BTreeMap<&'a [u8], &'a [u8]>>
+    metadata: Option<Vec<(&'a [u8], &'a [u8])>>
 }
 
 #[derive(Deserialize,Debug)]
@@ -143,6 +143,7 @@ fn run_through_test_data() {
         let buf = &test[..];
 
         let mut de = avvy::AvroDeserializer{buf, schema: &schema, current_field_index: None  };
+        de.skip(5);
         let ut = UT::deserialize(&mut de).unwrap();
     }
 }

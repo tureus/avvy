@@ -144,9 +144,21 @@ impl<'de, 'a> Deserializer<'de> for &'a mut AvroDeserializer<'de> {
         res
     }
 
+    fn deserialize_seq<V>(mut self, visitor: V) -> Result<V::Value, Self::Error>
+        where V: Visitor<'de> {
+
+        visitor.visit_seq(super::AvroSeqVisitor::new( &mut self))
+    }
+
+    fn deserialize_tuple<V>(mut self, size: usize, visitor: V) -> Result<V::Value, Self::Error>
+        where V: Visitor<'de> {
+
+        visitor.visit_seq(super::AvroTupleVisitor::new( &mut self, size))
+    }
+
     forward_to_deserialize_any!{
         <V: Visitor<'de>>
-        bool char str byte_buf unit unit_struct newtype_struct seq tuple tuple_struct ignored_any
+        bool char str byte_buf unit unit_struct newtype_struct tuple_struct ignored_any
     }
 }
 

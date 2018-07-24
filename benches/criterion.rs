@@ -108,10 +108,12 @@ pub struct UT<'a> {
     pub metric: String,
     value: Value,
     #[serde(borrow)]
-    tags: Option<fnv::FnvHashMap<&'a [u8], &'a [u8]>>,
+    tags: Option<Vec<(&'a [u8], &'a [u8])>>,
+//    tags: Option<fnv::FnvHashMap<&'a [u8], &'a [u8]>>,
 //    tags: Option<std::collections::BTreeMap<&'a [u8], &'a [u8]>>,
     #[serde(borrow)]
-        metadata: Option<fnv::FnvHashMap<&'a [u8], &'a [u8]>>,
+    metadata: Option<Vec<(&'a [u8], &'a [u8])>>,
+//    metadata: Option<fnv::FnvHashMap<&'a [u8], &'a [u8]>>,
 //    metadata: Option<std::collections::BTreeMap<&'a [u8], &'a [u8]>>
 }
 

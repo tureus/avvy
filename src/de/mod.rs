@@ -12,3 +12,9 @@ pub use self::identifier_visitor::*;
 
 mod map_access;
 pub use self::map_access::*;
+
+mod seq_visitor;
+pub use self::seq_visitor::*;
+
+mod tuple_visitor;
+pub use self::tuple_visitor::*;

@@ -18,6 +18,9 @@ impl<'a, 'de> SeqAccess<'de> for AvroTupleVisitor<'a, 'de> {
 
     fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>, Self::Error>
         where T: DeserializeSeed<'de> {
+        if self.de.peek() == 0 {
+            return Ok(None)
+        }
         seed.deserialize(&mut *self.de).map(Some)
     }
 

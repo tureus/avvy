@@ -12,6 +12,7 @@ integer-encoding = "1.0.5"
 byteorder = "1.2.3"
 env_logger = "0.5.10"
 fnv = "1.0.6"
+smallvec = { version="0.6.3", features=["serde"] }
 
 [dev-dependencies]
 criterion = "0.2"

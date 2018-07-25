@@ -1,6 +1,7 @@
 extern crate serde;
 #[macro_use] extern crate serde_derive;
 extern crate avvy;
+extern crate smallvec;
 
 use serde::de::Deserialize;
 
@@ -104,9 +105,11 @@ pub struct UT<'a> {
     pub metric: String,
     value: Value,
     #[serde(borrow)]
-    tags: Option<Vec<(&'a [u8], &'a [u8])>>,
+//    tags: Option<Vec<(&'a [u8], &'a [u8])>>,
+//    tags: [Option<(&'a [u8], &'a [u8])>; 20],
+    tags: Option<smallvec::SmallVec<[(&'a [u8], &'a [u8]); 20]>>,
     #[serde(borrow)]
-    metadata: Option<Vec<(&'a [u8], &'a [u8])>>
+    metadata: Option<smallvec::SmallVec<[(&'a [u8], &'a [u8]); 20]>>
 }
 
 #[derive(Deserialize,Debug)]

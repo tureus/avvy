@@ -80,6 +80,14 @@ impl<'de, 'a> Deserializer<'de> for &'a mut AvroDeserializer<'de> {
         visitor.visit_borrowed_bytes(string)
     }
 
+    fn deserialize_str<V>(mut self, visitor: V) -> Result<V::Value, Self::Error>
+        where V: Visitor<'de> {
+        info!("deserialize bytes...");
+        let string = self.visit_str();
+        visitor.visit_borrowed_str(unsafe{ std::str::from_utf8_unchecked(string) })
+    }
+
+
     fn deserialize_option<V>(mut self, visitor: V) -> Result<V::Value, Self::Error>
         where V: Visitor<'de> {
         info!("deserialize option...");
@@ -158,7 +166,7 @@ impl<'de, 'a> Deserializer<'de> for &'a mut AvroDeserializer<'de> {
 
     forward_to_deserialize_any!{
         <V: Visitor<'de>>
-        bool char str byte_buf unit unit_struct newtype_struct tuple_struct ignored_any
+        bool char byte_buf unit unit_struct newtype_struct tuple_struct ignored_any
     }
 }
 

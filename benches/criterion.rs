@@ -106,7 +106,7 @@ pub const SCHEMA_STR: &'static str = r###"{
 
 macro_rules! ut_struct {
         ($i:ident, $e:ty) => {
-            #[derive(Deserialize,Debug)]
+            #[derive(Deserialize,Debug,Clone)]
             pub struct $i<'a> {
                 timestamp: Timestamp,
                 pub metric: String,
@@ -125,7 +125,7 @@ ut_struct!(UTFNV, Option<fnv::FnvHashMap<&'a [u8], &'a [u8]>>);
 ut_struct!(UTBTreeMap, Option<std::collections::BTreeMap<&'a [u8], &'a [u8]>>);
 ut_struct!(UTHashMap, Option<std::collections::HashMap<&'a [u8], &'a [u8]>>);
 
-#[derive(Deserialize,Debug)]
+#[derive(Deserialize,Debug,Clone)]
 enum Timestamp {
     Long(i64),
     Int(i32),
@@ -133,7 +133,7 @@ enum Timestamp {
     Double(f64)
 }
 
-#[derive(Deserialize,Debug)]
+#[derive(Deserialize,Debug,Clone)]
 enum Value {
     Long(i64),
     Int(i32),
@@ -166,7 +166,7 @@ macro_rules! ut_test {
     }
 }
 
-fn criterion_benchmark(c: &mut Criterion) {
+fn ut_deserializer_benchmark(c: &mut Criterion) {
     ut_test!("UTSmallVec", UTSmallVec, c);
     ut_test!("UTVec", UTVec, c);
     ut_test!("UTFNV", UTFNV, c);
@@ -174,5 +174,40 @@ fn criterion_benchmark(c: &mut Criterion) {
     ut_test!("UTHashMap", UTHashMap, c);
 }
 
-criterion_group!(benches, criterion_benchmark);
+fn ut_conversion_benchmark(c: &mut Criterion) {
+    c.bench_function("serialize for influxdb", |b| {
+        let record : [u8; 257] = [0, 0, 0, 2, 106, 0, 186, 149, 235, 179, 11, 86, 118, 105, 97, 115, 97, 116, 45, 97, 98, 45, 118, 110, 111, 45, 112, 109, 46, 117, 116, 46, 112, 100, 102, 46, 102, 108, 45, 115, 100, 117, 45, 109, 97, 114, 107, 101, 100, 45, 99, 111, 117, 110, 116, 0, 0, 2, 22, 10, 97, 110, 45, 105, 100, 2, 49, 10, 112, 100, 102, 105, 100, 8, 49, 48, 53, 50, 16, 115, 109, 97, 99, 100, 45, 105, 100, 6, 49, 52, 55, 24, 115, 97, 116, 101, 108, 108, 105, 116, 101, 45, 105, 100, 2, 52, 34, 115, 109, 97, 99, 45, 115, 101, 114, 118, 105, 99, 101, 45, 110, 97, 109, 101, 26, 115, 109, 97, 99, 45, 99, 104, 105, 48, 55, 45, 115, 50, 16, 109, 97, 99, 45, 97, 100, 100, 114, 24, 48, 48, 97, 48, 98, 99, 56, 99, 55, 57, 55, 102, 10, 115, 116, 97, 116, 101, 14, 111, 110, 95, 108, 105, 110, 101, 14, 98, 101, 97, 109, 45, 105, 100, 10, 49, 49, 48, 52, 53, 22, 99, 97, 114, 114, 105, 101, 114, 100, 45, 105, 100, 2, 55, 12, 118, 110, 111, 45, 105, 100, 6, 120, 99, 105, 44, 115, 101, 114, 118, 105, 110, 103, 45, 115, 109, 97, 99, 45, 104, 111, 115, 116, 45, 110, 97, 109, 101, 36, 115, 109, 97, 99, 45, 99, 104, 105, 48, 55, 45, 110, 50, 45, 98, 101, 116, 97, 0, 0];
+        let visitor = Schema::from_str(SCHEMA_STR).unwrap();
+        let mut deserializer = AvroDeserializer{buf: &record[..], schema: &visitor, current_field_index: None };
+        deserializer.skip(5);
+        let utvec = UTVec::deserialize(&mut deserializer).unwrap();
+        let record_count = 10000;
+        let data : Vec<UTVec> = (1..record_count).map(|_| (utvec).clone() ).collect();
+
+        use std::io::BufWriter;
+        use std::io::Write;
+        let mut buf = Vec::with_capacity(record_count * 262);
+
+        b.iter(|| {
+            for utvec in &data {
+//                write!(buf, "{},yes=no,false=true,what=down not=important,dont=care 1465839830100400200\n", utvec.metric);
+                write!(&mut buf, "{},", utvec.metric).unwrap();
+                if let Some(ref tags) = utvec.tags {
+                    for (k,v) in tags {
+                        if v.len() != 0 {
+                            write!(&mut buf, "{}={}", String::from_utf8_lossy(k), String::from_utf8_lossy(v)).unwrap();
+                        }
+                    }
+                }
+
+                write!(&mut buf, " metric={:?} ", utvec.value).unwrap();
+                write!(&mut buf, "{:?}\n", utvec.timestamp).unwrap();
+            }
+            panic!("buf: {}", buf.len());
+            buf.clear();
+        })
+    });
+}
+
+criterion_group!(benches, ut_deserializer_benchmark, ut_conversion_benchmark);
 criterion_main!(benches);

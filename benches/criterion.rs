@@ -120,7 +120,7 @@ macro_rules! ut_struct {
 }
 
 ut_struct!(UTSmallVec, Option<smallvec::SmallVec<[(&'a [u8], &'a [u8]); 15]>>);
-ut_struct!(UTVec, Option::< Vec<(&'a [u8], &'a [u8])> >);
+ut_struct!(UTVec, Option< Vec<(&'a [u8], &'a [u8])> >);
 ut_struct!(UTFNV, Option<fnv::FnvHashMap<&'a [u8], &'a [u8]>>);
 ut_struct!(UTBTreeMap, Option<std::collections::BTreeMap<&'a [u8], &'a [u8]>>);
 ut_struct!(UTHashMap, Option<std::collections::HashMap<&'a [u8], &'a [u8]>>);
@@ -184,7 +184,6 @@ fn ut_conversion_benchmark(c: &mut Criterion) {
         let record_count = 10000;
         let data : Vec<UTVec> = (1..record_count).map(|_| (utvec).clone() ).collect();
 
-        use std::io::BufWriter;
         use std::io::Write;
         let mut buf = Vec::with_capacity(record_count * 262);
 
@@ -203,7 +202,6 @@ fn ut_conversion_benchmark(c: &mut Criterion) {
                 write!(&mut buf, " metric={:?} ", utvec.value).unwrap();
                 write!(&mut buf, "{:?}\n", utvec.timestamp).unwrap();
             }
-            panic!("buf: {}", buf.len());
             buf.clear();
         })
     });

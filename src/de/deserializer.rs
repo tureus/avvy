@@ -69,21 +69,21 @@ impl<'de, 'a> Deserializer<'de> for &'a mut AvroDeserializer<'de> {
     fn deserialize_string<V>(self, visitor: V) -> Result<V::Value, Self::Error>
         where V: Visitor<'de> {
         info!("deserialize string...");
-        let string = String::from_utf8(self.visit_str().to_owned()).unwrap();
+        let string = String::from_utf8(self.visit_borrow_bytes().to_owned()).unwrap();
         visitor.visit_string(string)
     }
 
     fn deserialize_bytes<V>(self, visitor: V) -> Result<V::Value, Self::Error>
         where V: Visitor<'de> {
         info!("deserialize bytes...");
-        let string = self.visit_str();
+        let string = self.visit_borrow_bytes();
         visitor.visit_borrowed_bytes(string)
     }
 
     fn deserialize_str<V>(self, visitor: V) -> Result<V::Value, Self::Error>
         where V: Visitor<'de> {
         info!("deserialize bytes...");
-        let string = self.visit_str();
+        let string = self.visit_borrow_bytes();
         visitor.visit_borrowed_str(unsafe{ std::str::from_utf8_unchecked(string) })
     }
 
@@ -249,7 +249,7 @@ impl<'de> AvroDeserializer<'de> {
         int
     }
 
-    pub fn visit_str(&mut self) -> &'de [u8] {
+    pub fn visit_borrow_bytes(&mut self) -> &'de [u8] {
         let strlen = self.visit_long();
         info!("strlen: {}", strlen);
 

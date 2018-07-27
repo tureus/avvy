@@ -148,8 +148,7 @@ impl<'de, 'a> Deserializer<'de> for &'a mut AvroDeserializer<'de> {
         let current_field = self.current_field();
         info!("deserialize_identifier {}", current_field.name);
 
-        let res = visitor.visit_string(current_field.name.clone());
-        res
+        visitor.visit_str(&current_field.name[..])
     }
 
     fn deserialize_seq<V>(mut self, visitor: V) -> Result<V::Value, Self::Error>

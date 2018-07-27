@@ -11,6 +11,10 @@ use serde::de::Deserialize;
 
 use avvy::{ Schema, AvroDeserializer };
 
+pub trait InfluxDBLineProtocol<W: std::io::Write> {
+    fn to_line_protocol(&self, writer: &mut W) -> Result<(),std::io::Error>;
+}
+
 pub const SCHEMA_STR: &'static str = r###"{
       "type": "record",
       "name": "ut",
@@ -109,12 +113,49 @@ macro_rules! ut_struct {
             #[derive(Deserialize,Debug,Clone)]
             pub struct $i<'a> {
                 timestamp: Timestamp,
-                pub metric: String,
+                pub metric: &'a str,
                 value: Value,
                 #[serde(borrow)]
                 tags: $e,
                 #[serde(borrow)]
                 metadata: $e,
+            }
+
+            impl<'a, W: std::io::Write> InfluxDBLineProtocol<W> for $i<'a> {
+                fn to_line_protocol(&self, buf: &mut W) -> Result<(),std::io::Error> {
+                    write!(buf, "{},", self.metric).unwrap();
+                    if let Some(ref tags) = self.tags {
+                        for (k, v) in tags {
+                            if v.len() != 0 {
+                                write!(buf, "{}={}", k , v)?;
+                            }
+                        }
+                    }
+
+                    match self.value {
+                        Value::Long(ref val) => write!(buf, " metric={}", val)?,
+                        Value::Int(ref val) => write!(buf, " metric={}", val)?,
+                        Value::Float(ref val) => write!(buf, " metric={}", val)?,
+                        Value::Double(ref val) => write!(buf, " metric={}", val)?,
+                        Value::Long8(ref val) => write!(buf, " metric={}", val)?,
+                        Value::Long16(ref val) => write!(buf, " metric={}", val)?,
+                        Value::Long32(ref val) => write!(buf, " metric={}", val)?,
+                        Value::Long64(ref val) => write!(buf, " metric={}", val)?,
+                        Value::I8(ref val) => write!(buf, " metric={}", val)?,
+                        Value::I16(ref val) => write!(buf, " metric={}", val)?,
+                        Value::I32(ref val) => write!(buf, " metric={}", val)?,
+                        Value::Int64(ref val) => write!(buf, " metric={}", val)?
+                    };
+
+                    match self.timestamp {
+                        Timestamp::Long(ref val) => write!(buf, "{}\n", val)?,
+                        Timestamp::Int(ref val) => write!(buf, "{}\n", val)?,
+                        Timestamp::Float(ref val) => write!(buf, "{}\n", val)?,
+                        Timestamp::Double(ref val) => write!(buf, "{}\n", val)?
+                    };
+
+                    Ok(())
+                }
             }
         }
 }
@@ -122,33 +163,59 @@ macro_rules! ut_struct {
 macro_rules! ut_noborrow_struct {
         ($i:ident, $e:ty) => {
             #[derive(Deserialize,Debug,Clone)]
-            pub struct $i {
+            pub struct $i<'a> {
                 timestamp: Timestamp,
-                pub metric: String,
+                pub metric: &'a str,
                 value: Value,
                 tags: $e,
                 metadata: $e,
             }
+
+            impl<'a, W: std::io::Write> InfluxDBLineProtocol<W> for $i<'a> {
+                fn to_line_protocol(&self, buf: &mut W) -> Result<(),std::io::Error> {
+                    write!(buf, "{},", self.metric).unwrap();
+                    if let Some(ref tags) = self.tags {
+                        for (k, v) in tags {
+                            if v.len() != 0 {
+                                write!(buf, "{}={}", k , v)?;
+                            }
+                        }
+                    }
+
+                    match self.value {
+                        Value::Long(ref val) => write!(buf, " metric={}", val)?,
+                        Value::Int(ref val) => write!(buf, " metric={}", val)?,
+                        Value::Float(ref val) => write!(buf, " metric={}", val)?,
+                        Value::Double(ref val) => write!(buf, " metric={}", val)?,
+                        Value::Long8(ref val) => write!(buf, " metric={}", val)?,
+                        Value::Long16(ref val) => write!(buf, " metric={}", val)?,
+                        Value::Long32(ref val) => write!(buf, " metric={}", val)?,
+                        Value::Long64(ref val) => write!(buf, " metric={}", val)?,
+                        Value::I8(ref val) => write!(buf, " metric={}", val)?,
+                        Value::I16(ref val) => write!(buf, " metric={}", val)?,
+                        Value::I32(ref val) => write!(buf, " metric={}", val)?,
+                        Value::Int64(ref val) => write!(buf, " metric={}", val)?
+                    };
+
+                    match self.timestamp {
+                        Timestamp::Long(ref val) => write!(buf, "{}\n", val)?,
+                        Timestamp::Int(ref val) => write!(buf, "{}\n", val)?,
+                        Timestamp::Float(ref val) => write!(buf, "{}\n", val)?,
+                        Timestamp::Double(ref val) => write!(buf, "{}\n", val)?
+                    };
+
+                    Ok(())
+                }
+            }
         }
 }
 
-ut_struct!(UTSmallVec, Option<smallvec::SmallVec<[(&'a [u8], &'a [u8]); 15]>>);
-ut_struct!(UTVec, Option< Vec<(&'a [u8], &'a [u8])> >);
+ut_struct!(UTSmallVec, Option<smallvec::SmallVec<[(&'a str, &'a str); 15]>>);
+ut_struct!(UTVec, Option< Vec<(&'a str, &'a str)> >);
 ut_noborrow_struct!(UTVecString, Option< Vec<(String, String)> >);
-ut_struct!(UTFNV, Option<fnv::FnvHashMap<&'a [u8], &'a [u8]>>);
-ut_struct!(UTBTreeMap, Option<std::collections::BTreeMap<&'a [u8], &'a [u8]>>);
-ut_struct!(UTHashMap, Option<std::collections::HashMap<&'a [u8], &'a [u8]>>);
-
-#[derive(Deserialize,Debug,Clone)]
-pub struct UTUnsafeUTF8<'a> {
-    timestamp: Timestamp,
-    pub metric: String,
-    value: Value,
-    #[serde(borrow)]
-    tags: Option<Vec<(&'a str, &'a str)>>,
-    #[serde(borrow)]
-    metadata: Option<Vec<(&'a str, &'a str)>>,
-}
+ut_struct!(UTFNV, Option<fnv::FnvHashMap<&'a str, &'a str>>);
+ut_struct!(UTBTreeMap, Option<std::collections::BTreeMap<&'a str, &'a str>>);
+ut_struct!(UTHashMap, Option<std::collections::HashMap<&'a str, &'a str>>);
 
 #[derive(Deserialize,Debug,Clone)]
 enum Timestamp {
@@ -198,7 +265,6 @@ fn ut_deserializer_benchmark(c: &mut Criterion) {
     ut_test!("UTFNV", UTFNV, c);
     ut_test!("UTBTreeMap", UTBTreeMap, c);
     ut_test!("UTHashMap", UTHashMap, c);
-    ut_test!("UTUnsafeUTF8", UTUnsafeUTF8, c);
 }
 
 fn ut_vec_string_conversion_benchmark(c: &mut Criterion) {
@@ -211,22 +277,11 @@ fn ut_vec_string_conversion_benchmark(c: &mut Criterion) {
         let record_count = 10000;
         let data : Vec<UTVecString> = (1..record_count).map(|_| (utvec).clone() ).collect();
 
-        use std::io::Write;
         let mut buf = Vec::with_capacity(record_count * 262);
 
         b.iter(|| {
             for utvec in &data {
-                write!(&mut buf, "{},", utvec.metric).unwrap();
-                if let Some(ref tags) = utvec.tags {
-                    for (k, v) in tags {
-                        if v.len() != 0 {
-                            write!(&mut buf, "{}={}", k ,v).unwrap();
-                        }
-                    }
-                }
-
-                write!(&mut buf, " metric={:?} ", utvec.value).unwrap();
-                write!(&mut buf, "{:?}\n", utvec.timestamp).unwrap();
+                utvec.to_line_protocol(&mut buf).unwrap()
             }
             buf.clear();
         })
@@ -243,22 +298,11 @@ fn ut_vec_raw_string_conversion_benchmark(c: &mut Criterion) {
         let record_count = 10000;
         let data : Vec<UTVec> = (1..record_count).map(|_| (utvec).clone() ).collect();
 
-        use std::io::Write;
         let mut buf = Vec::with_capacity(record_count * 262);
 
         b.iter(|| {
             for utvec in &data {
-                write!(&mut buf, "{},", utvec.metric).unwrap();
-                if let Some(ref tags) = utvec.tags {
-                    for (k, v) in tags {
-                        if v.len() != 0 {
-                            write!(&mut buf, "{}={}", String::from_utf8_lossy(k) , String::from_utf8_lossy(v)).unwrap();
-                        }
-                    }
-                }
-
-                write!(&mut buf, " metric={:?} ", utvec.value).unwrap();
-                write!(&mut buf, "{:?}\n", utvec.timestamp).unwrap();
+                utvec.to_line_protocol(&mut buf).unwrap();
             }
             buf.clear();
         })
@@ -276,92 +320,11 @@ fn ut_vec_raw_buf_conversion_benchmark(c: &mut Criterion) {
         let record_count = 10000;
         let data : Vec<UTVec> = (1..record_count).map(|_| (utvec).clone() ).collect();
 
-        use std::io::Write;
-        let mut buf = Vec::with_capacity(record_count * 262);
+        let mut buf: Vec<u8> = Vec::with_capacity(record_count * 262);
 
         b.iter(|| {
             for utvec in &data {
-                write!(&mut buf, "{},", utvec.metric).unwrap();
-                if let Some(ref tags) = utvec.tags {
-                    for (k, v) in tags {
-                        if v.len() != 0 {
-                            unsafe {
-                                write!(&mut buf, "{}={}", std::str::from_utf8_unchecked(k) , std::str::from_utf8_unchecked(v)).unwrap();
-                            }
-                        }
-                    }
-                }
-
-                write!(&mut buf, " metric={:?} ", utvec.value).unwrap();
-                write!(&mut buf, "{:?}\n", utvec.timestamp).unwrap();
-            }
-            buf.clear();
-        })
-    });
-}
-
-fn ut_vec_raw_buf_noconversion_benchmark(c: &mut Criterion) {
-    c.bench_function("serialize for std::str::from_utf8_unchecked influxdb", |b| {
-        let record : [u8; 257] = [0, 0, 0, 2, 106, 0, 186, 149, 235, 179, 11, 86, 118, 105, 97, 115, 97, 116, 45, 97, 98, 45, 118, 110, 111, 45, 112, 109, 46, 117, 116, 46, 112, 100, 102, 46, 102, 108, 45, 115, 100, 117, 45, 109, 97, 114, 107, 101, 100, 45, 99, 111, 117, 110, 116, 0, 0, 2, 22, 10, 97, 110, 45, 105, 100, 2, 49, 10, 112, 100, 102, 105, 100, 8, 49, 48, 53, 50, 16, 115, 109, 97, 99, 100, 45, 105, 100, 6, 49, 52, 55, 24, 115, 97, 116, 101, 108, 108, 105, 116, 101, 45, 105, 100, 2, 52, 34, 115, 109, 97, 99, 45, 115, 101, 114, 118, 105, 99, 101, 45, 110, 97, 109, 101, 26, 115, 109, 97, 99, 45, 99, 104, 105, 48, 55, 45, 115, 50, 16, 109, 97, 99, 45, 97, 100, 100, 114, 24, 48, 48, 97, 48, 98, 99, 56, 99, 55, 57, 55, 102, 10, 115, 116, 97, 116, 101, 14, 111, 110, 95, 108, 105, 110, 101, 14, 98, 101, 97, 109, 45, 105, 100, 10, 49, 49, 48, 52, 53, 22, 99, 97, 114, 114, 105, 101, 114, 100, 45, 105, 100, 2, 55, 12, 118, 110, 111, 45, 105, 100, 6, 120, 99, 105, 44, 115, 101, 114, 118, 105, 110, 103, 45, 115, 109, 97, 99, 45, 104, 111, 115, 116, 45, 110, 97, 109, 101, 36, 115, 109, 97, 99, 45, 99, 104, 105, 48, 55, 45, 110, 50, 45, 98, 101, 116, 97, 0, 0];
-        let visitor = Schema::from_str(SCHEMA_STR).unwrap();
-        let mut deserializer = AvroDeserializer{buf: &record[..], schema: &visitor, current_field_index: None };
-        deserializer.skip(5);
-        let utvec = UTUnsafeUTF8::deserialize(&mut deserializer).unwrap();
-        let record_count = 10000;
-        let data : Vec<UTUnsafeUTF8> = (1..record_count).map(|_| (utvec).clone() ).collect();
-
-        use std::io::Write;
-        let mut buf = Vec::with_capacity(record_count * 262);
-
-        b.iter(|| {
-            for utvec in &data {
-                write!(&mut buf, "{},", utvec.metric).unwrap();
-                if let Some(ref tags) = utvec.tags {
-                    for (k, v) in tags {
-                        if v.len() != 0 {
-                            unsafe {
-                                write!(&mut buf, "{}={}", k , v).unwrap();
-                            }
-                        }
-                    }
-                }
-
-                write!(&mut buf, " metric={:?} ", utvec.value).unwrap();
-                write!(&mut buf, "{:?}\n", utvec.timestamp).unwrap();
-            }
-            buf.clear();
-        })
-    });
-}
-
-fn ut_vec_raw_buf_noconversion_iterloop_benchmark(c: &mut Criterion) {
-    c.bench_function("serialize for std::str::from_utf8_unchecked (iterloop) influxdb", |b| {
-        let record : [u8; 257] = [0, 0, 0, 2, 106, 0, 186, 149, 235, 179, 11, 86, 118, 105, 97, 115, 97, 116, 45, 97, 98, 45, 118, 110, 111, 45, 112, 109, 46, 117, 116, 46, 112, 100, 102, 46, 102, 108, 45, 115, 100, 117, 45, 109, 97, 114, 107, 101, 100, 45, 99, 111, 117, 110, 116, 0, 0, 2, 22, 10, 97, 110, 45, 105, 100, 2, 49, 10, 112, 100, 102, 105, 100, 8, 49, 48, 53, 50, 16, 115, 109, 97, 99, 100, 45, 105, 100, 6, 49, 52, 55, 24, 115, 97, 116, 101, 108, 108, 105, 116, 101, 45, 105, 100, 2, 52, 34, 115, 109, 97, 99, 45, 115, 101, 114, 118, 105, 99, 101, 45, 110, 97, 109, 101, 26, 115, 109, 97, 99, 45, 99, 104, 105, 48, 55, 45, 115, 50, 16, 109, 97, 99, 45, 97, 100, 100, 114, 24, 48, 48, 97, 48, 98, 99, 56, 99, 55, 57, 55, 102, 10, 115, 116, 97, 116, 101, 14, 111, 110, 95, 108, 105, 110, 101, 14, 98, 101, 97, 109, 45, 105, 100, 10, 49, 49, 48, 52, 53, 22, 99, 97, 114, 114, 105, 101, 114, 100, 45, 105, 100, 2, 55, 12, 118, 110, 111, 45, 105, 100, 6, 120, 99, 105, 44, 115, 101, 114, 118, 105, 110, 103, 45, 115, 109, 97, 99, 45, 104, 111, 115, 116, 45, 110, 97, 109, 101, 36, 115, 109, 97, 99, 45, 99, 104, 105, 48, 55, 45, 110, 50, 45, 98, 101, 116, 97, 0, 0];
-        let visitor = Schema::from_str(SCHEMA_STR).unwrap();
-        let mut deserializer = AvroDeserializer{buf: &record[..], schema: &visitor, current_field_index: None };
-        deserializer.skip(5);
-        let utvec = UTUnsafeUTF8::deserialize(&mut deserializer).unwrap();
-        let record_count = 10000;
-        let data : Vec<UTUnsafeUTF8> = (1..record_count).map(|_| (utvec).clone() ).collect();
-
-        use std::io::Write;
-        let mut buf = Vec::with_capacity(record_count * 262);
-
-        b.iter(|| {
-            for utvec in data.iter() {
-                write!(&mut buf, "{},", utvec.metric).unwrap();
-                if let Some(ref tags) = utvec.tags {
-                    for (k, v) in tags {
-                        if v.len() != 0 {
-                            unsafe {
-                                write!(&mut buf, "{}={}", k , v).unwrap();
-                            }
-                        }
-                    }
-                }
-
-                write!(&mut buf, " metric={:?} ", utvec.value).unwrap();
-                write!(&mut buf, "{:?}\n", utvec.timestamp).unwrap();
+                utvec.to_line_protocol(&mut buf).unwrap();
             }
             buf.clear();
         })
@@ -378,29 +341,53 @@ fn ut_vec_raw_buf_forloop2_conversion_benchmark(c: &mut Criterion) {
         let record_count = 10000;
         let data : Vec<UTVec> = (1..record_count).map(|_| (utvec).clone() ).collect();
 
-        use std::io::Write;
         let mut buf = Vec::with_capacity(record_count * 262);
 
         b.iter(|| {
             for utvec in &data {
-                write!(&mut buf, "{},", utvec.metric).unwrap();
-                if let Some(ref tags) = utvec.tags {
-                    for (k, v) in tags.iter() {
-                        if v.len() != 0 {
-                            unsafe {
-                                write!(&mut buf, "{}={}", std::str::from_utf8_unchecked(k) , std::str::from_utf8_unchecked(v)).unwrap();
-                            }
-                        }
-                    }
-                }
-
-                write!(&mut buf, " metric={:?} ", utvec.value).unwrap();
-                write!(&mut buf, "{:?}\n", utvec.timestamp).unwrap();
+                utvec.to_line_protocol(&mut buf).unwrap();
             }
             buf.clear();
         })
     });
 }
 
-criterion_group!(benches, ut_deserializer_benchmark, ut_vec_string_conversion_benchmark, ut_vec_raw_string_conversion_benchmark, ut_vec_raw_buf_conversion_benchmark, ut_vec_raw_buf_forloop2_conversion_benchmark, ut_vec_raw_buf_noconversion_benchmark, ut_vec_raw_buf_noconversion_iterloop_benchmark);
+fn ut_vec_write_buf_noloop_benchmark(c: &mut Criterion) {
+    c.bench_function("serialize for std::str::from_utf8_unchecked (one record serialization) influxdb", |b| {
+        let record : [u8; 257] = [0, 0, 0, 2, 106, 0, 186, 149, 235, 179, 11, 86, 118, 105, 97, 115, 97, 116, 45, 97, 98, 45, 118, 110, 111, 45, 112, 109, 46, 117, 116, 46, 112, 100, 102, 46, 102, 108, 45, 115, 100, 117, 45, 109, 97, 114, 107, 101, 100, 45, 99, 111, 117, 110, 116, 0, 0, 2, 22, 10, 97, 110, 45, 105, 100, 2, 49, 10, 112, 100, 102, 105, 100, 8, 49, 48, 53, 50, 16, 115, 109, 97, 99, 100, 45, 105, 100, 6, 49, 52, 55, 24, 115, 97, 116, 101, 108, 108, 105, 116, 101, 45, 105, 100, 2, 52, 34, 115, 109, 97, 99, 45, 115, 101, 114, 118, 105, 99, 101, 45, 110, 97, 109, 101, 26, 115, 109, 97, 99, 45, 99, 104, 105, 48, 55, 45, 115, 50, 16, 109, 97, 99, 45, 97, 100, 100, 114, 24, 48, 48, 97, 48, 98, 99, 56, 99, 55, 57, 55, 102, 10, 115, 116, 97, 116, 101, 14, 111, 110, 95, 108, 105, 110, 101, 14, 98, 101, 97, 109, 45, 105, 100, 10, 49, 49, 48, 52, 53, 22, 99, 97, 114, 114, 105, 101, 114, 100, 45, 105, 100, 2, 55, 12, 118, 110, 111, 45, 105, 100, 6, 120, 99, 105, 44, 115, 101, 114, 118, 105, 110, 103, 45, 115, 109, 97, 99, 45, 104, 111, 115, 116, 45, 110, 97, 109, 101, 36, 115, 109, 97, 99, 45, 99, 104, 105, 48, 55, 45, 110, 50, 45, 98, 101, 116, 97, 0, 0];
+        let visitor = Schema::from_str(SCHEMA_STR).unwrap();
+        let mut deserializer = AvroDeserializer{buf: &record[..], schema: &visitor, current_field_index: None };
+        deserializer.skip(5);
+        let utvec = UTVec::deserialize(&mut deserializer).unwrap();
+        let record_count = 10;
+
+        let mut buf = Vec::with_capacity(record_count * 262);
+
+        b.iter(|| {
+            utvec.to_line_protocol(&mut buf).unwrap();
+            buf.clear();
+        })
+
+    });
+}
+
+fn ut_vec_write_buf_noloop_nodebug_benchmark(c: &mut Criterion) {
+    c.bench_function("serialize for std::str::from_utf8_unchecked (one record serialization, no debug print) influxdb", |b| {
+        let record : [u8; 257] = [0, 0, 0, 2, 106, 0, 186, 149, 235, 179, 11, 86, 118, 105, 97, 115, 97, 116, 45, 97, 98, 45, 118, 110, 111, 45, 112, 109, 46, 117, 116, 46, 112, 100, 102, 46, 102, 108, 45, 115, 100, 117, 45, 109, 97, 114, 107, 101, 100, 45, 99, 111, 117, 110, 116, 0, 0, 2, 22, 10, 97, 110, 45, 105, 100, 2, 49, 10, 112, 100, 102, 105, 100, 8, 49, 48, 53, 50, 16, 115, 109, 97, 99, 100, 45, 105, 100, 6, 49, 52, 55, 24, 115, 97, 116, 101, 108, 108, 105, 116, 101, 45, 105, 100, 2, 52, 34, 115, 109, 97, 99, 45, 115, 101, 114, 118, 105, 99, 101, 45, 110, 97, 109, 101, 26, 115, 109, 97, 99, 45, 99, 104, 105, 48, 55, 45, 115, 50, 16, 109, 97, 99, 45, 97, 100, 100, 114, 24, 48, 48, 97, 48, 98, 99, 56, 99, 55, 57, 55, 102, 10, 115, 116, 97, 116, 101, 14, 111, 110, 95, 108, 105, 110, 101, 14, 98, 101, 97, 109, 45, 105, 100, 10, 49, 49, 48, 52, 53, 22, 99, 97, 114, 114, 105, 101, 114, 100, 45, 105, 100, 2, 55, 12, 118, 110, 111, 45, 105, 100, 6, 120, 99, 105, 44, 115, 101, 114, 118, 105, 110, 103, 45, 115, 109, 97, 99, 45, 104, 111, 115, 116, 45, 110, 97, 109, 101, 36, 115, 109, 97, 99, 45, 99, 104, 105, 48, 55, 45, 110, 50, 45, 98, 101, 116, 97, 0, 0];
+        let visitor = Schema::from_str(SCHEMA_STR).unwrap();
+        let mut deserializer = AvroDeserializer{buf: &record[..], schema: &visitor, current_field_index: None };
+        deserializer.skip(5);
+        let utvec = UTVec::deserialize(&mut deserializer).unwrap();
+        let record_count = 10;
+
+        let mut buf = Vec::with_capacity(record_count * 262);
+
+        b.iter(|| {
+            utvec.to_line_protocol(&mut buf).unwrap();
+            buf.clear();
+        })
+    });
+}
+
+criterion_group!(benches, ut_deserializer_benchmark, ut_vec_string_conversion_benchmark, ut_vec_raw_string_conversion_benchmark, ut_vec_raw_buf_conversion_benchmark, ut_vec_raw_buf_forloop2_conversion_benchmark, ut_vec_write_buf_noloop_benchmark, ut_vec_write_buf_noloop_nodebug_benchmark);
 criterion_main!(benches);

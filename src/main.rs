@@ -102,12 +102,12 @@ pub const SCHEMA_STR: &'static str = r###"{
 #[derive(Deserialize,Debug)]
 pub struct UT<'a> {
     pub timestamp: Timestamp,
-    pub metric: String,
+    pub metric: &'a str,
     pub value: Value,
     #[serde(borrow)]
-    pub tags: Option<Vec<(&'a [u8], &'a [u8])>>,
+    pub tags: Option<Vec<(&'a str, &'a str)>>,
     #[serde(borrow)]
-    pub metadata: Option<Vec<(&'a [u8], &'a [u8])>>
+    pub metadata: Option<Vec<(&'a str, &'a str)>>
 }
 
 #[derive(Deserialize,Debug)]
@@ -145,75 +145,13 @@ fn main() {
     env_logger::init();
 
     let tests = test_data();
+    let test = &tests[0][..];
     let schema = avvy::Schema::from_str(SCHEMA_STR).unwrap();
 
-    for (i,test) in (&tests[..]).iter().enumerate() {
-        let buf = &test[..];
-        let buf_len = buf.len();
-
-        let mut de = avvy::AvroDeserializer{buf, schema: &schema, current_field_index: None  };
-        de.skip(5);
-        let ut = UT::deserialize(&mut de);
-        match ut {
-            Ok(ut) => {
-                println!("ut: {}", ut.metric);
-                for (k,v) in ut.tags.unwrap() {
-                    println!("   k: {:10} {}", String::from_utf8_lossy(k), String::from_utf8_lossy(v));
-                }
-            },
-            Err(e) => {
-//                panic!("e: {}", e);
-                println!("!!!!!!!");
-                let mut fde = avvy::AvroDeserializer{buf: buf, schema: &schema, current_field_index: None};
-                fde.skip(5);
-                let _ts_variant = fde.visit_int();
-                println!("ts_variant: {}", _ts_variant);
-                let _ts_val = fde.visit_long();
-                println!("ts_val: {}", _ts_val);
-
-                let _metric = fde.visit_str();
-                println!("metric: {}", String::from_utf8_lossy(_metric));
-
-                let _val_variant = fde.visit_int();
-                println!("value variant: {}", _val_variant);
-
-                let _val = fde.visit_f64();
-                println!("value: Double({})", _val);
-
-                let variant = fde.visit_int();
-                let mut blocks = fde.visit_int();
-                let tag_size_in_bytes : Option<i32> = if blocks < 0 {
-                    blocks *= -1;
-//                    Some(fde.visit_int())
-                    None
-                } else {
-                    None
-                };
-                println!("enum variant: {}, blocks: {}, tag_size_in_bytes: {:?}", variant, blocks, tag_size_in_bytes );
-                let mut counter = 0;
-                for _b in 0..blocks*2 {
-                    let bytes = fde.visit_str();
-//                    if bytes.len() == 0 && counter % 2 == 0 {
-//                        break
-//                    }
-                    counter += 1;
-                    let stringy = String::from_utf8(bytes.to_owned()).unwrap();
-//                    println!("stringy: {} / bytes: {:?}", stringy, bytes);
-                    println!("stringy: {}", stringy);
-                }
-
-                let variant = fde.visit_int();
-                let blocks = fde.visit_int();
-                println!("map variant: {}, blocks: {}", variant, blocks );
-                for _b in 0..blocks*-2 {
-                    let bytes = fde.visit_str();
-                    let stringy = String::from_utf8(bytes.to_owned()).unwrap();
-                    println!("stringy: {}", stringy);
-                }
-
-                fde.dump();
-            }
-        }
+    for _ in 1..1000000000 {
+        let mut deserializer = avvy::AvroDeserializer{ buf: test, current_field_index: None, schema: &schema};
+        deserializer.skip(5);
+        UT::deserialize(&mut deserializer).unwrap();
     }
 }
 

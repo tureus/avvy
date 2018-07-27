@@ -5,8 +5,6 @@ extern crate smallvec;
 
 use serde::de::Deserialize;
 
-use avvy::{ Schema, AvroDeserializer };
-
 pub const SCHEMA_STR: &'static str = r###"{
       "type": "record",
       "name": "ut",
@@ -147,7 +145,7 @@ fn run_through_test_data() {
 
         let mut de = avvy::AvroDeserializer{buf, schema: &schema, current_field_index: None  };
         de.skip(5);
-        let ut = UT::deserialize(&mut de).unwrap();
+        UT::deserialize(&mut de).unwrap();
     }
 }
 

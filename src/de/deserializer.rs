@@ -13,74 +13,74 @@ pub struct AvroDeserializer<'de> {
 impl<'de, 'a> Deserializer<'de> for &'a mut AvroDeserializer<'de> {
     type Error = AvroError;
 
-    fn deserialize_any<V>(mut self, visitor: V) -> Result<V::Value,Self::Error>
+    fn deserialize_any<V>(self, _: V) -> Result<V::Value,Self::Error>
         where V: Visitor<'de> {
         unimplemented!("we don't do free form deserialization")
     }
 
-    fn deserialize_i8<V>(mut self, visitor: V) -> Result<V::Value,Self::Error> where V: Visitor<'de> {
+    fn deserialize_i8<V>(self, _: V) -> Result<V::Value,Self::Error> where V: Visitor<'de> {
         unimplemented!()
     }
 
-    fn deserialize_i16<V>(mut self, visitor: V) -> Result<V::Value,Self::Error> where V: Visitor<'de> {
+    fn deserialize_i16<V>(self, _: V) -> Result<V::Value,Self::Error> where V: Visitor<'de> {
         unimplemented!()
     }
 
-    fn deserialize_i32<V>(mut self, visitor: V) -> Result<V::Value,Self::Error> where V: Visitor<'de> {
+    fn deserialize_i32<V>(self, visitor: V) -> Result<V::Value,Self::Error> where V: Visitor<'de> {
         info!("deserialize_i32");
         visitor.visit_i32(self.visit_i32())
     }
 
-    fn deserialize_i64<V>(mut self, visitor: V) -> Result<V::Value,Self::Error>
+    fn deserialize_i64<V>(self, visitor: V) -> Result<V::Value,Self::Error>
         where V: Visitor<'de> {
         info!("deserialize_i64");
         visitor.visit_i64(self.visit_i64())
     }
 
-    fn deserialize_u8<V>(mut self, visitor: V) -> Result<V::Value,Self::Error> where V: Visitor<'de> {
+    fn deserialize_u8<V>(self, _: V) -> Result<V::Value,Self::Error> where V: Visitor<'de> {
         unimplemented!()
     }
 
-    fn deserialize_u16<V>(mut self, visitor: V) -> Result<V::Value,Self::Error> where V: Visitor<'de> {
+    fn deserialize_u16<V>(self, _: V) -> Result<V::Value,Self::Error> where V: Visitor<'de> {
         unimplemented!()
     }
 
-    fn deserialize_u32<V>(mut self, visitor: V) -> Result<V::Value,Self::Error> where V: Visitor<'de> {
+    fn deserialize_u32<V>(self, visitor: V) -> Result<V::Value,Self::Error> where V: Visitor<'de> {
         visitor.visit_u32(self.visit_u32())
     }
 
-    fn deserialize_u64<V>(mut self, visitor: V) -> Result<V::Value,Self::Error> where V: Visitor<'de> {
+    fn deserialize_u64<V>(self, visitor: V) -> Result<V::Value,Self::Error> where V: Visitor<'de> {
         visitor.visit_u64(self.visit_u64())
     }
 
-    fn deserialize_f32<V>(mut self, visitor: V) -> Result<V::Value,Self::Error> where V: Visitor<'de> {
+    fn deserialize_f32<V>(self, visitor: V) -> Result<V::Value,Self::Error> where V: Visitor<'de> {
         let val = self.buf.read_f32::<LittleEndian>().unwrap();
         self.buf = &self.buf[4..];
         info!("deserialize_f32: {}", val);
         visitor.visit_f32(val)
     }
 
-    fn deserialize_f64<V>(mut self, visitor: V) -> Result<V::Value,Self::Error> where V: Visitor<'de> {
+    fn deserialize_f64<V>(self, visitor: V) -> Result<V::Value,Self::Error> where V: Visitor<'de> {
         let val = self.visit_f64();
         visitor.visit_f64(val)
     }
 
 
-    fn deserialize_string<V>(mut self, visitor: V) -> Result<V::Value, Self::Error>
+    fn deserialize_string<V>(self, visitor: V) -> Result<V::Value, Self::Error>
         where V: Visitor<'de> {
         info!("deserialize string...");
         let string = String::from_utf8(self.visit_str().to_owned()).unwrap();
         visitor.visit_string(string)
     }
 
-    fn deserialize_bytes<V>(mut self, visitor: V) -> Result<V::Value, Self::Error>
+    fn deserialize_bytes<V>(self, visitor: V) -> Result<V::Value, Self::Error>
         where V: Visitor<'de> {
         info!("deserialize bytes...");
         let string = self.visit_str();
         visitor.visit_borrowed_bytes(string)
     }
 
-    fn deserialize_str<V>(mut self, visitor: V) -> Result<V::Value, Self::Error>
+    fn deserialize_str<V>(self, visitor: V) -> Result<V::Value, Self::Error>
         where V: Visitor<'de> {
         info!("deserialize bytes...");
         let string = self.visit_str();
@@ -88,7 +88,7 @@ impl<'de, 'a> Deserializer<'de> for &'a mut AvroDeserializer<'de> {
     }
 
 
-    fn deserialize_option<V>(mut self, visitor: V) -> Result<V::Value, Self::Error>
+    fn deserialize_option<V>(self, visitor: V) -> Result<V::Value, Self::Error>
         where V: Visitor<'de> {
         info!("deserialize option...");
         let enum_variant = {
@@ -133,16 +133,15 @@ impl<'de, 'a> Deserializer<'de> for &'a mut AvroDeserializer<'de> {
         visitor.visit_map(AvroIdentifierMapVisitor {de: &mut self, count: 0, expected: fields.len()})
     }
 
-    fn deserialize_enum<V>(mut self, enum_name: &'static str, enum_variants: &[&'static str], visitor: V) -> Result<V::Value, Self::Error>
+    fn deserialize_enum<V>(self, enum_name: &'static str, enum_variants: &[&'static str], visitor: V) -> Result<V::Value, Self::Error>
         where V: Visitor<'de> {
-        let field = self.current_field();
         info!("deserialize_enum enum_name: {}, enum_variants: {:?}", enum_name, enum_variants);
 
-        let value = visitor.visit_enum(AvroEnumVisitor::new(self, enum_name, enum_variants) )?;
+        let value = visitor.visit_enum(AvroEnumVisitor::new(self) )?;
         Ok(value)
     }
 
-    fn deserialize_identifier<V>(mut self, visitor: V) -> Result<V::Value, Self::Error>
+    fn deserialize_identifier<V>(self, visitor: V) -> Result<V::Value, Self::Error>
         where V: Visitor<'de> {
         self.next_field();
         let current_field = self.current_field();

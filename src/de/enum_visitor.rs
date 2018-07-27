@@ -7,7 +7,7 @@ pub struct AvroEnumVisitor<'a, 'de: 'a> {
 }
 
 impl<'a, 'de> AvroEnumVisitor<'a, 'de> {
-    pub fn new(de: &'a mut AvroDeserializer<'de>, enum_name: &'static str, enum_variants: &'a[&'static str]) -> Self {
+    pub fn new(de: &'a mut AvroDeserializer<'de>) -> Self {
         Self { de }
     }
 }

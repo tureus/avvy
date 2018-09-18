@@ -4,6 +4,7 @@ extern crate serde;
 extern crate avvy;
 extern crate fnv;
 extern crate smallvec;
+extern crate byteorder;
 
 use criterion::Criterion;
 
@@ -389,5 +390,48 @@ fn ut_vec_write_buf_noloop_nodebug_benchmark(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, ut_deserializer_benchmark, ut_vec_string_conversion_benchmark, ut_vec_raw_string_conversion_benchmark, ut_vec_raw_buf_conversion_benchmark, ut_vec_raw_buf_forloop2_conversion_benchmark, ut_vec_write_buf_noloop_benchmark, ut_vec_write_buf_noloop_nodebug_benchmark);
+fn buferator_benchmark(c: &mut Criterion) {
+    c.bench_function("microbenchmark: buferator read i32", |b| {
+        use avvy::buferator::Buferator;
+        use byteorder::{ByteOrder, LittleEndian};
+        let record : [u8; 4] = [2, 0, 0, 0];
+
+        b.iter(|| {
+            let mut buf = Buferator::new(&record[..]);
+            let val : i32 = buf.call(4, |buf: &[u8]| {
+                LittleEndian::read_i32(buf)
+            }).unwrap();
+            assert_eq!(val, 2);
+        })
+    });
+
+    c.bench_function("microbenchmark: cursor read i32 to buf", |b| {
+        use std::io::{ Cursor, Read };
+        use byteorder::{ByteOrder, LittleEndian};
+        let record : [u8; 4] = [2, 0, 0, 0];
+
+        b.iter(|| {
+            let mut cursor = Cursor::new(&record[..]);
+            let mut bytes : [u8; 4] = [0; 4];
+            cursor.read(&mut bytes[..]).unwrap();
+            let val = LittleEndian::read_i32(&bytes[..]);
+            assert_eq!(val, 2);
+        })
+    });
+
+    c.bench_function("microbenchmark: cursor read i32 with ReadBytesExt", |b| {
+        use std::io::{ Cursor, Read };
+        use byteorder::{ByteOrder, LittleEndian, ReadBytesExt};
+        let record : [u8; 4] = [2, 0, 0, 0];
+
+        b.iter(|| {
+            let mut cursor = Cursor::new(&record[..]);
+            let val = cursor.read_i32::<LittleEndian>().unwrap();
+            assert_eq!(val, 2);
+        })
+    });
+}
+
+
+criterion_group!(benches, buferator_benchmark, /* ut_deserializer_benchmark, ut_vec_string_conversion_benchmark, ut_vec_raw_string_conversion_benchmark, ut_vec_raw_buf_conversion_benchmark, ut_vec_raw_buf_forloop2_conversion_benchmark, ut_vec_write_buf_noloop_benchmark, ut_vec_write_buf_noloop_nodebug_benchmark*/);
 criterion_main!(benches);

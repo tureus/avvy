@@ -1,4 +1,4 @@
-#![feature(nll, benchmark, test)]
+#![feature(nll, test)]
 
 #[macro_use] extern crate serde;
 #[macro_use] extern crate serde_derive;
@@ -17,3 +17,8 @@ pub use schema::*;
 
 mod de;
 pub use de::*;
+
+
+// Temporary while I'm on the plane!
+pub mod cdr;
+pub mod buferator;

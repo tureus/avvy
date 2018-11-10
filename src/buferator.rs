@@ -10,7 +10,7 @@ impl<'de> Buferator<'de> {
     }
 
     pub fn call<T>(&mut self, bytes: usize, f: fn(&'de[u8]) -> T) -> Result<T,()> {
-        assert!(self.offset + bytes < self.buf.len());
+        assert!(self.offset + bytes <= self.buf.len());
 
         let res = f(&self.buf[self.offset..self.offset+bytes]);
         self.offset += bytes;
